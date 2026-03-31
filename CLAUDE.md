@@ -44,6 +44,7 @@ src/tools/                    built-in tools
 
 - Conversation isolation is keyed by `userId`.
 - Same conversation is serialized by `ConversationLock`.
+- `POST /chat` is incremental at the client boundary, but the server currently reloads persisted history and rebuilds full Anthropic `messages[]` on each turn.
 - `AskUserQuestion` pauses a turn and resumes through a later `POST /chat`.
 - Skills are loaded from builtin, optional org, and optional user directories.
 - MCP supports `http`, `sse`, and `stdio`.

@@ -17,10 +17,18 @@ Core properties:
 1. Request enters Express through `src/server.ts`.
 2. Middleware assigns request ID, authenticates the user, and applies rate limiting.
 3. `src/routes/chat.ts` resolves or creates the conversation and acquires the per-conversation lock.
-4. `src/agent/engine.ts` builds system prompt, user preamble, tool list, and runs the Anthropic loop.
-5. Tool calls are dispatched through `src/tools/executor.ts` to built-in tools or MCP servers.
-6. New messages are persisted through the conversation store.
-7. The lock is released in `finally`.
+4. `src/routes/chat.ts` reloads the persisted conversation history for that conversation.
+5. `src/agent/engine.ts` builds system prompt, user preamble, tool list, reconstructs Anthropic `messages[]`, and runs the Anthropic loop.
+6. Tool calls are dispatched through `src/tools/executor.ts` to built-in tools or MCP servers.
+7. New messages are persisted through the conversation store.
+8. The lock is released in `finally`.
+
+## Conversation History Semantics
+
+- The HTTP API is incremental: callers send only the latest user message and optionally `conversation_id`.
+- The current femtoclaw runtime is not incremental at the Anthropic API boundary. It reloads the stored conversation history and replays the full reconstructed `messages[]` context on each turn.
+- History growth is controlled by compaction rather than by Claude-side session resume handles.
+- Compared with picoclaw: the external API shape is similar, but picoclaw can also resume Claude Agent SDK sessions with stored session metadata. femtoclaw does not currently implement that path.
 
 ## Key Modules
 

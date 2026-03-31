@@ -25,6 +25,12 @@ Basic request body:
 }
 ```
 
+Conversation history semantics:
+
+- The client API is incremental: send only the new user message plus optional `conversation_id`.
+- The current femtoclaw server then reloads the persisted conversation history for that conversation and sends the reconstructed full `messages[]` context to the Anthropic Messages API on each turn.
+- This is different from picoclaw's runtime internals, which also accept incremental client requests but can additionally use Claude Agent SDK session resume metadata.
+
 Optional fields include:
 
 - `model`

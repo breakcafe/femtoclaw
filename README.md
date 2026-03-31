@@ -64,6 +64,12 @@ curl -N -X POST http://localhost:9000/chat \
   -d '{"message":"帮我查一下最近的新闻","stream":true}'
 ```
 
+Conversation history behavior:
+
+- Clients use an incremental protocol: each `POST /chat` sends only the new message plus optional `conversation_id`.
+- The current femtoclaw runtime reloads persisted conversation history and replays the full reconstructed Anthropic `messages[]` on each turn.
+- This differs from picoclaw internals, which also expose an incremental client API but can additionally use Claude Agent SDK session resume metadata.
+
 Resume an `AskUserQuestion` turn:
 
 ```bash
@@ -154,6 +160,7 @@ At the time of the latest update these commands passed with 49 tests.
 
 - Non-streaming `AskUserQuestion` returns HTTP `202` with `status: "awaiting_input"`.
 - Streaming `AskUserQuestion` emits `input_required`, then `message_paused`, and the client resumes with a new `POST /chat`.
+- `conversation_id` gives the server enough information to reload history; clients do not send the full transcript back on every turn.
 - Pending paused questions expire after `INPUT_TIMEOUT_MS`; this build does not auto-run a background continuation after expiry.
 
 ## Architecture
