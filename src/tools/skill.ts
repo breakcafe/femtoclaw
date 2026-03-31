@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../types.js';
+import { renderSkillSafetyReminder } from '../skills/safety.js';
 
 export const SkillTool: ToolDefinition = {
   name: 'Skill',
@@ -61,10 +62,14 @@ Important:
       };
     }
 
+    const safetyReminder = renderSkillSafetyReminder(skillDef.safetyWarnings);
+
     // Match Claude Code's output format: "Launching skill: {name}\n{content}"
     return {
       type: 'text',
-      text: `Launching skill: ${skillDef.name}\n${skillDef.content}`,
+      text: safetyReminder
+        ? `Launching skill: ${skillDef.name}\n${safetyReminder}\n${skillDef.content}`
+        : `Launching skill: ${skillDef.name}\n${skillDef.content}`,
     };
   },
 };

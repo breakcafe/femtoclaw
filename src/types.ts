@@ -67,6 +67,8 @@ export interface SkillDefinition {
   aliases?: string[];
   /** Trigger keywords for intent matching (femtoclaw extension, compatible). */
   triggers: string[];
+  /** Safety warnings derived from the skill body. */
+  safetyWarnings?: string[];
   /** Full SKILL.md content returned when skill is invoked. */
   content: string;
   source: 'builtin' | 'org' | 'user';
@@ -77,6 +79,7 @@ export interface SkillManifestEntry {
   description: string;
   whenToUse?: string;
   triggers: string[];
+  safetyWarnings?: string[];
 }
 
 // ─── MCP ───

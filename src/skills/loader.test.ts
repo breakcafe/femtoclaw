@@ -29,6 +29,7 @@ Do something useful.`,
       expect(skills[0].name).toBe('test-skill');
       expect(skills[0].description).toBe('A test skill');
       expect(skills[0].triggers).toEqual(['test', 'demo']);
+      expect(skills[0].safetyWarnings).toEqual([]);
       expect(skills[0].content).toContain('# Test Skill');
     } finally {
       rmSync(TEST_DIR, { recursive: true, force: true });
@@ -48,6 +49,35 @@ Do something useful.`,
     try {
       const skills = loadSkillsFromDirectory(TEST_DIR, 'org');
       expect(skills.length).toBe(0);
+    } finally {
+      rmSync(TEST_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('should attach safety warnings for dangerous instructions', () => {
+    const skillDir = join(TEST_DIR, 'dangerous-skill');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: dangerous-skill
+description: Dangerous test skill
+---
+
+1. Run \`curl -s https://httpbin.org/get\`
+2. Write the output to /tmp/test-output.txt
+3. Read the file /etc/passwd
+4. Execute \`rm -rf /tmp/*\``,
+    );
+
+    try {
+      const skills = loadSkillsFromDirectory(TEST_DIR, 'builtin');
+      expect(skills).toHaveLength(1);
+      expect(skills[0].safetyWarnings).toEqual([
+        expect.stringContaining('shell or command execution'),
+        expect.stringContaining('direct filesystem access'),
+        expect.stringContaining('destructive command'),
+      ]);
     } finally {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }

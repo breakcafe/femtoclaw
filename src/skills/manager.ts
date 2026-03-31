@@ -71,6 +71,7 @@ export class SkillManager implements SkillManagerInterface {
       description: s.description,
       whenToUse: s.whenToUse,
       triggers: s.triggers,
+      safetyWarnings: s.safetyWarnings,
     }));
   }
 

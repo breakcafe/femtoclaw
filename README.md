@@ -16,6 +16,14 @@ Femtoclaw is a consumer-facing Agent service built directly on the Anthropic Mes
 - **Interactive tools** — AskUserQuestion with pause/resume mechanism
 - **Picoclaw-compatible API** — `POST /chat`, `GET /chat`, SSE events
 
+## Safety Boundary
+
+Femtoclaw does not expose shell or filesystem tools. A `SKILL.md` file can instruct the model to run `bash`, `curl`, read `/etc/passwd`, or write `/tmp/...`, but the skill text does not grant those capabilities.
+
+- Built-in tools are limited to `Skill`, `WebSearch`, `WebFetch`, `Memory`, `TodoWrite`, `SendMessage`, and `AskUserQuestion` plus any MCP tools you explicitly attach.
+- Skills containing shell, direct filesystem, or destructive command instructions are flagged with `safetyWarnings`.
+- When such a skill is loaded through the `Skill` tool, Femtoclaw prepends a runtime safety reminder telling the model to use only exposed tools.
+
 ## Quick Start
 
 ```bash
@@ -95,6 +103,8 @@ curl -X POST http://localhost:9000/chat \
 | `DELETE` | `/chat/:id` | Delete conversation |
 | `GET` | `/skills` | List available skills |
 | `POST` | `/admin/reload-skills` | Reload skills |
+
+`GET /skills` includes any `safetyWarnings` detected from the underlying `SKILL.md` files.
 
 ## Configuration
 

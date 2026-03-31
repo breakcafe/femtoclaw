@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import type { SkillDefinition } from '../types.js';
 import { logger } from '../utils/logger.js';
+import { analyzeSkillSafety } from './safety.js';
 
 /**
  * Parse YAML-like frontmatter from SKILL.md content.
@@ -71,6 +72,7 @@ export function loadSkillsFromDirectory(
               .map((t) => t.trim())
               .filter(Boolean)
           : [];
+        const safety = analyzeSkillSafety(raw);
 
         skills.push({
           name,
@@ -79,6 +81,7 @@ export function loadSkillsFromDirectory(
           argumentHint,
           aliases,
           triggers,
+          safetyWarnings: safety.warnings,
           content: raw,
           source,
         });
