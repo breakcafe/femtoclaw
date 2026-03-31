@@ -7,6 +7,9 @@ This directory contains code-adjacent documentation that is safe to publish and 
 - `architecture.md`: runtime architecture and module responsibilities
 - `api.md`: HTTP API, SSE events, and pause/resume protocol
 - `configuration.md`: environment variables, directories, and config files
+- `skills-guide.md`: creating and using skills, three-tier system
+- `security.md`: trust model, attack surface, deployment hardening
+- `deployment.md`: Docker, horizontal scaling, MCP configuration
 
 ## Scope
 

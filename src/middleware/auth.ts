@@ -37,7 +37,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   req.userContext = {
-    userId: (req.headers['x-user-id'] as string) ?? 'default',
+    userId: (req.headers['x-user-id'] as string) ?? 'anonymous',
     displayName: req.headers['x-user-name'] as string,
     timezone: req.headers['x-timezone'] as string,
     locale: req.headers['x-locale'] as string,

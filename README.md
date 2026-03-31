@@ -16,9 +16,12 @@ Lightweight conversational Agent service with multi-user isolation, Skills, and 
 
 Public implementation docs live in `docs/` inside the code repository:
 
-- `docs/architecture.md`
-- `docs/api.md`
-- `docs/configuration.md`
+- `docs/architecture.md` — runtime architecture and module responsibilities
+- `docs/api.md` — HTTP API, SSE events, and pause/resume protocol
+- `docs/configuration.md` — environment variables, directories, and config files
+- `docs/skills-guide.md` — creating and using skills, three-tier system
+- `docs/security.md` — trust model, attack surface, deployment hardening
+- `docs/deployment.md` — Docker, horizontal scaling, MCP configuration
 
 Internal notes, prompt dumps, and test reports live in the outer workspace `../docs/` and are not part of the public code docs set.
 

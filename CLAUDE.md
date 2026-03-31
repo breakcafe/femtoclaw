@@ -25,6 +25,9 @@ npm run dev
 - Treat the outer workspace `../docs/` as internal notes, reports, and working material unless the task explicitly asks for it.
 - When updating implementation docs, prefer changing `code/docs/*.md` first, then sync any internal follow-up notes separately.
 - Config changes should be reflected in `code/docs/configuration.md`.
+- Security model changes should be reflected in `code/docs/security.md`.
+- Skills system changes should be reflected in `code/docs/skills-guide.md`.
+- Deployment changes should be reflected in `code/docs/deployment.md`.
 
 ## Main Architecture
 
