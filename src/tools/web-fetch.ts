@@ -23,6 +23,19 @@ export const WebFetchTool: ToolDefinition = {
     const url = input.url as string;
     const MAX_CONTENT_LENGTH = 50000;
 
+    // Security: only allow http/https — reject file://, data:, etc.
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return {
+          type: 'error',
+          error: `Blocked: only http/https URLs are allowed (got ${parsed.protocol})`,
+        };
+      }
+    } catch {
+      return { type: 'error', error: `Invalid URL: ${url}` };
+    }
+
     try {
       const response = await fetch(url, {
         headers: {

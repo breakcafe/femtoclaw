@@ -113,8 +113,10 @@ export class AgentEngine {
       { timezone: input.timezone, device_type: input.device_type, locale: input.locale },
     );
 
-    // 3. Build tool list (builtin + MCP)
-    const { tools, mcpWarnings } = await this.buildToolList(input.mcp_servers, input.mcp_context);
+    // 3. Build tool list (builtin + MCP if enabled)
+    const mcpServers = config.ENABLE_MCP ? input.mcp_servers : undefined;
+    const mcpContext = config.ENABLE_MCP ? input.mcp_context : undefined;
+    const { tools, mcpWarnings } = await this.buildToolList(mcpServers, mcpContext);
     if (mcpWarnings.length > 0) {
       logger.warn({ mcpWarnings }, 'MCP tool discovery warnings');
     }

@@ -47,6 +47,12 @@ export interface Config {
 
   // AskUserQuestion
   INPUT_TIMEOUT_MS: number;
+
+  // Feature toggles
+  ENABLE_MEMORY: boolean;
+  ENABLE_SKILLS: boolean;
+  ENABLE_MCP: boolean;
+  ENABLE_WEB_TOOLS: boolean;
 }
 
 function env(key: string, fallback: string = ''): string {
@@ -102,4 +108,9 @@ export const config: Config = {
   RATE_LIMIT_RPM: envInt('RATE_LIMIT_RPM', 60),
 
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
+
+  ENABLE_MEMORY: env('ENABLE_MEMORY', 'true') === 'true',
+  ENABLE_SKILLS: env('ENABLE_SKILLS', 'true') === 'true',
+  ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
+  ENABLE_WEB_TOOLS: env('ENABLE_WEB_TOOLS', 'true') === 'true',
 };

@@ -185,26 +185,30 @@ export async function buildUserMessagePreamble(
 ): Promise<Array<{ type: 'text'; text: string }>> {
   const contentBlocks: Array<{ type: 'text'; text: string }> = [];
 
-  // Block 0: Skill manifest
-  const skills = skillManager.getSkillManifest(userId);
-  if (skills.length > 0) {
-    contentBlocks.push({
-      type: 'text',
-      text: `<system-reminder>\n${renderSkillManifest(skills)}\n</system-reminder>`,
-    });
-  }
-
-  // Block 1: User memory summary
-  try {
-    const memories = await memoryService.listMemories(userId);
-    if (memories.length > 0) {
+  // Block 0: Skill manifest (gated by ENABLE_SKILLS)
+  if (config.ENABLE_SKILLS) {
+    const skills = skillManager.getSkillManifest(userId);
+    if (skills.length > 0) {
       contentBlocks.push({
         type: 'text',
-        text: `<system-reminder>\n${renderMemoryContext(memories)}\n</system-reminder>`,
+        text: `<system-reminder>\n${renderSkillManifest(skills)}\n</system-reminder>`,
       });
     }
-  } catch (err) {
-    logger.warn({ err, userId }, 'Failed to load user memories');
+  }
+
+  // Block 1: User memory summary (gated by ENABLE_MEMORY)
+  if (config.ENABLE_MEMORY) {
+    try {
+      const memories = await memoryService.listMemories(userId);
+      if (memories.length > 0) {
+        contentBlocks.push({
+          type: 'text',
+          text: `<system-reminder>\n${renderMemoryContext(memories)}\n</system-reminder>`,
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, userId }, 'Failed to load user memories');
+    }
   }
 
   return contentBlocks;
