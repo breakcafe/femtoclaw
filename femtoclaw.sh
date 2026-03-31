@@ -21,7 +21,7 @@ IMAGE_NAME="femtoclaw:latest"
 PORT="${PORT:-9000}"
 BASE_URL="http://localhost:${PORT}"
 API_TOKEN="${API_TOKEN:-femtoclaw-$(openssl rand -hex 8)}"
-REPORT_FILE="${SCRIPT_DIR}/test-report.md"
+REPORT_FILE="${SCRIPT_DIR}/../docs/test-report.md"
 
 # Colors
 RED='\033[0;31m'

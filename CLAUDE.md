@@ -19,6 +19,12 @@ npm run format:check
 npm run dev
 ```
 
+## Documentation Boundary
+
+- Treat `docs/` inside this repository as the primary public documentation set for code work.
+- Treat the outer workspace `../docs/` as internal notes, reports, and working material unless the task explicitly asks for it.
+- When updating implementation docs, prefer changing `code/docs/*.md` first, then sync any internal follow-up notes separately.
+
 ## Main Architecture
 
 ```text
@@ -61,6 +67,7 @@ src/tools/                    built-in tools
 ## Guardrails
 
 - Keep docs consistent with the actual implementation, especially around chat resume, skills, and MCP.
+- Prefer `code/docs/` over outer docs when you need code-adjacent reference material.
 - Use `apply_patch` for code edits.
 - Run `npm run build && npm test && npm run format:check` before finishing.
 - Do not claim live Anthropic or external MCP integration was verified unless it was actually run.

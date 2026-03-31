@@ -12,6 +12,15 @@ Lightweight conversational Agent service with multi-user isolation, Skills, and 
 - `AskUserQuestion` pause/resume flow for both SSE and non-streaming `/chat`
 - Memory backends: `sqlite`, `api`, `mcp`
 
+## Docs
+
+Public implementation docs live in `docs/` inside the code repository:
+
+- `docs/architecture.md`
+- `docs/api.md`
+
+Internal notes, prompt dumps, and test reports live in the outer workspace `../docs/` and are not part of the public code docs set.
+
 ## Quick Start
 
 ```bash
@@ -148,4 +157,4 @@ At the time of the latest update these commands passed with 49 tests.
 
 ## Architecture
 
-Primary design document: `../docs/architecture-design.md`
+See `docs/architecture.md` for the implementation-facing architecture summary.
