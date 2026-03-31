@@ -8,7 +8,7 @@ import { TodoWriteTool } from './todo-write.js';
 import { SendMessageTool } from './send-message.js';
 import { AskUserQuestionTool } from './ask-user-question.js';
 
-/** All tools unconditionally (for executor lookup — execution still works). */
+/** All registered tools (order = default display order). */
 const allTools: ToolDefinition[] = [
   SkillTool,
   WebSearchTool,
@@ -24,35 +24,51 @@ for (const tool of allTools) {
   toolMap.set(tool.name, tool);
 }
 
-/** Lookup any tool by name (always works, regardless of toggles). */
+/** Lookup any tool by name (always works — executor needs this). */
 export function getToolByName(name: string): ToolDefinition | undefined {
   return toolMap.get(name);
 }
 
 /**
- * Get tool definitions to expose to Claude (respects feature toggles).
- * Disabled tools are hidden from the tool list so Claude won't invoke them.
+ * Parse an allowlist string into a Set, or null for "all".
+ * Accepts: "*" | "Skill,Memory,WebFetch" | "Skill, Memory, WebFetch"
  */
-export function getAllToolDefinitions(): Array<{
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-}> {
-  const tools: ToolDefinition[] = [];
+function parseAllowList(raw: string): Set<string> | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '*') return null; // null = allow all
+  return new Set(
+    trimmed
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
 
-  // Always-on core tools
-  tools.push(TodoWriteTool, SendMessageTool, AskUserQuestionTool);
+/**
+ * Get tool definitions to expose to Claude.
+ *
+ * Respects two layers of allow-listing:
+ *   1. Server-level: ALLOWED_TOOLS env var (config)
+ *   2. Request-level: allowed_tools param from POST /chat
+ *
+ * A tool must pass BOTH to be visible. If either is "*" / undefined,
+ * that layer is a pass-through.
+ */
+export function getAllToolDefinitions(
+  requestAllowedTools?: string[],
+): Array<{ name: string; description: string; input_schema: Record<string, unknown> }> {
+  const serverAllow = parseAllowList(config.ALLOWED_TOOLS);
+  const requestAllow = requestAllowedTools ? new Set(requestAllowedTools) : null;
 
-  // Conditional tools
-  if (config.ENABLE_SKILLS) tools.push(SkillTool);
-  if (config.ENABLE_MEMORY) tools.push(MemoryTool);
-  if (config.ENABLE_WEB_TOOLS) {
-    tools.push(WebSearchTool, WebFetchTool);
-  }
-
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema,
-  }));
+  return allTools
+    .filter((t) => {
+      if (serverAllow && !serverAllow.has(t.name)) return false;
+      if (requestAllow && !requestAllow.has(t.name)) return false;
+      return true;
+    })
+    .map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema,
+    }));
 }

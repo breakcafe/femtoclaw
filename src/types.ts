@@ -148,6 +148,8 @@ export interface ChatRequest {
   show_tool_use?: boolean;
   mcp_servers?: Record<string, McpServerConfig>;
   mcp_context?: Record<string, McpServerContext>;
+  /** Per-request tool allowlist. Overrides server-level ALLOWED_TOOLS for this request. */
+  allowed_tools?: string[];
   timezone?: string;
   locale?: string;
   device_type?: string;

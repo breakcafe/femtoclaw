@@ -58,6 +58,8 @@ export interface AgentRunInput {
   show_tool_use?: boolean;
   mcp_servers?: Record<string, McpServerConfig>;
   mcp_context?: Record<string, McpServerContext>;
+  /** Per-request tool allowlist (intersected with server-level ALLOWED_TOOLS). */
+  allowed_tools?: string[];
   metadata?: Record<string, unknown>;
   /** Restored history — each content is JSON-serialized ContentBlock[]. */
   existingMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -105,21 +107,27 @@ export class AgentEngine {
       metadata: input.metadata,
     });
 
-    // 2. Build user message preamble (skills + memory)
+    // 2. Build tool list (builtin filtered by allowed_tools + MCP if enabled)
+    const mcpServers = config.ENABLE_MCP ? input.mcp_servers : undefined;
+    const mcpContext = config.ENABLE_MCP ? input.mcp_context : undefined;
+    const { tools, mcpWarnings } = await this.buildToolList(
+      mcpServers,
+      mcpContext,
+      input.allowed_tools,
+    );
+    if (mcpWarnings.length > 0) {
+      logger.warn({ mcpWarnings }, 'MCP tool discovery warnings');
+    }
+
+    // 3. Build user message preamble (skills + memory — gated by active tools)
+    const activeToolNames = tools.map((t) => t.name);
     const preambleBlocks = await buildUserMessagePreamble(
       input.userId,
       this.skillManager,
       this.memoryService,
       { timezone: input.timezone, device_type: input.device_type, locale: input.locale },
+      activeToolNames,
     );
-
-    // 3. Build tool list (builtin + MCP if enabled)
-    const mcpServers = config.ENABLE_MCP ? input.mcp_servers : undefined;
-    const mcpContext = config.ENABLE_MCP ? input.mcp_context : undefined;
-    const { tools, mcpWarnings } = await this.buildToolList(mcpServers, mcpContext);
-    if (mcpWarnings.length > 0) {
-      logger.warn({ mcpWarnings }, 'MCP tool discovery warnings');
-    }
 
     // 4. Construct messages in Anthropic API format
     const messages: ApiMessage[] = [];
@@ -427,15 +435,17 @@ export class AgentEngine {
   private async buildToolList(
     perRequestServers?: Record<string, McpServerConfig>,
     perRequestContext?: Record<string, McpServerContext>,
+    requestAllowedTools?: string[],
   ): Promise<{
     tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
     mcpWarnings: string[];
   }> {
+    // Built-in tools filtered by server-level + request-level allowlist
     const tools: Array<{
       name: string;
       description: string;
       input_schema: Record<string, unknown>;
-    }> = getAllToolDefinitions();
+    }> = getAllToolDefinitions(requestAllowedTools);
 
     const { tools: mcpTools, warnings: mcpWarnings } = await this.mcpClientPool.getAnthropicTools(
       perRequestServers,

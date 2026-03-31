@@ -49,10 +49,20 @@ export interface Config {
   INPUT_TIMEOUT_MS: number;
 
   // Feature toggles
-  ENABLE_MEMORY: boolean;
-  ENABLE_SKILLS: boolean;
   ENABLE_MCP: boolean;
-  ENABLE_WEB_TOOLS: boolean;
+
+  /**
+   * Allowed built-in tools.
+   * Comma-separated list or "*" for all. Tools not in this list are hidden
+   * from Claude (it won't see or invoke them). The executor still recognizes
+   * them so existing conversations with tool_use history won't break.
+   *
+   * Env: ALLOWED_TOOLS="Skill,Memory,WebFetch"  — only these 3 visible
+   *      ALLOWED_TOOLS="*"                       — all tools (default)
+   *
+   * Also settable per-request via POST /chat { allowed_tools: [...] }
+   */
+  ALLOWED_TOOLS: string;
 }
 
 function env(key: string, fallback: string = ''): string {
@@ -109,8 +119,6 @@ export const config: Config = {
 
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
 
-  ENABLE_MEMORY: env('ENABLE_MEMORY', 'true') === 'true',
-  ENABLE_SKILLS: env('ENABLE_SKILLS', 'true') === 'true',
   ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
-  ENABLE_WEB_TOOLS: env('ENABLE_WEB_TOOLS', 'true') === 'true',
+  ALLOWED_TOOLS: env('ALLOWED_TOOLS', '*'),
 };

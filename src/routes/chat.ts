@@ -22,6 +22,7 @@ const chatRequestSchema = z.object({
   show_tool_use: z.boolean().optional(),
   mcp_servers: z.record(z.any()).optional(),
   mcp_context: z.record(z.any()).optional(),
+  allowed_tools: z.array(z.string()).optional(),
   timezone: z.string().optional(),
   locale: z.string().optional(),
   device_type: z.string().optional(),
@@ -134,6 +135,7 @@ export function chatRoutes(deps: ServerDeps): Router {
         show_tool_use: body.show_tool_use,
         mcp_servers: body.mcp_servers,
         mcp_context: body.mcp_context,
+        allowed_tools: body.allowed_tools,
         metadata: body.metadata,
         existingMessages,
       };

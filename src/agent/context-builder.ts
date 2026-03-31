@@ -182,11 +182,14 @@ export async function buildUserMessagePreamble(
     device_type?: string;
     locale?: string;
   },
+  /** Active tool names — only inject preamble for tools that are actually exposed. */
+  activeToolNames?: string[],
 ): Promise<Array<{ type: 'text'; text: string }>> {
   const contentBlocks: Array<{ type: 'text'; text: string }> = [];
+  const active = activeToolNames ? new Set(activeToolNames) : null;
 
-  // Block 0: Skill manifest (gated by ENABLE_SKILLS)
-  if (config.ENABLE_SKILLS) {
+  // Block 0: Skill manifest (only if Skill tool is active)
+  if (!active || active.has('Skill')) {
     const skills = skillManager.getSkillManifest(userId);
     if (skills.length > 0) {
       contentBlocks.push({
@@ -196,8 +199,8 @@ export async function buildUserMessagePreamble(
     }
   }
 
-  // Block 1: User memory summary (gated by ENABLE_MEMORY)
-  if (config.ENABLE_MEMORY) {
+  // Block 1: User memory summary (only if Memory tool is active)
+  if (!active || active.has('Memory')) {
     try {
       const memories = await memoryService.listMemories(userId);
       if (memories.length > 0) {
