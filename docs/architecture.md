@@ -41,10 +41,8 @@ Core properties:
 Current tier order:
 
 1. built-in skills from `BUILTIN_SKILLS_DIR`
-2. org skills from `ORG_SKILLS_URL` when it points to a local path or `file://` URL
+2. org skills from `ORG_SKILLS_URL` as a local directory
 3. user skills from `USER_SKILLS_DIR`
-
-Current implementation does not fetch remote HTTP skill bundles.
 
 ## MCP
 

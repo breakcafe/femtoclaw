@@ -6,6 +6,7 @@ This directory contains code-adjacent documentation that is safe to publish and 
 
 - `architecture.md`: runtime architecture and module responsibilities
 - `api.md`: HTTP API, SSE events, and pause/resume protocol
+- `configuration.md`: environment variables, directories, and config files
 
 ## Scope
 

@@ -8,26 +8,6 @@ import { SkillManager } from './skills/manager.js';
 import { createMemoryService } from './memory/service-factory.js';
 import { McpClientPool } from './mcp/client-pool.js';
 
-function resolveSkillsDirectory(raw: string): string | undefined {
-  if (!raw) {
-    return undefined;
-  }
-
-  if (/^https?:\/\//i.test(raw)) {
-    logger.warn(
-      { location: raw },
-      'Remote ORG_SKILLS_URL is not supported in this build, expected a local path or file:// URL',
-    );
-    return undefined;
-  }
-
-  if (raw.startsWith('file://')) {
-    return new URL(raw).pathname;
-  }
-
-  return raw;
-}
-
 async function main(): Promise<void> {
   logger.info('Starting Femtoclaw...');
 
@@ -39,7 +19,7 @@ async function main(): Promise<void> {
   // Initialize services
   const skillManager = new SkillManager(
     config.BUILTIN_SKILLS_DIR,
-    resolveSkillsDirectory(config.ORG_SKILLS_URL),
+    config.ORG_SKILLS_URL || undefined,
     config.USER_SKILLS_DIR,
   );
   await skillManager.loadSkills();

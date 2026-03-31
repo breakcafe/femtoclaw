@@ -18,6 +18,7 @@ Public implementation docs live in `docs/` inside the code repository:
 
 - `docs/architecture.md`
 - `docs/api.md`
+- `docs/configuration.md`
 
 Internal notes, prompt dumps, and test reports live in the outer workspace `../docs/` and are not part of the public code docs set.
 
@@ -96,10 +97,8 @@ curl -X POST http://localhost:9000/chat \
 Current build supports three tiers through directories:
 
 - Built-in: `BUILTIN_SKILLS_DIR`, default `./skills/builtin`
-- Org: `ORG_SKILLS_URL`, currently interpreted as a local path or `file://` URL
+- Org: `ORG_SKILLS_URL`, interpreted as a local directory path
 - User: `USER_SKILLS_DIR`, default `./skills/user`
-
-Remote HTTP skill bundles are not implemented in this build.
 
 ## MCP
 
@@ -131,11 +130,13 @@ Important variables:
 | `CONVERSATION_STORE_TYPE` | `sqlite`                    | `sqlite` or `api`                                 |
 | `MEMORY_SERVICE_TYPE`     | `sqlite`                    | `sqlite`, `api`, or `mcp`                         |
 | `MEMORY_MCP_SERVER`       | `memory`                    | MCP server name used by `MEMORY_SERVICE_TYPE=mcp` |
-| `ORG_SKILLS_URL`          | empty                       | Local org skills path or `file://` URL            |
+| `ORG_SKILLS_URL`          | empty                       | Local org skills directory                        |
 | `USER_SKILLS_DIR`         | `./skills/user`             | Optional user skill directory                     |
 | `MANAGED_MCP_CONFIG`      | `./config/managed-mcp.json` | Managed MCP config file                           |
 | `INPUT_TIMEOUT_MS`        | `300000`                    | Pending question expiration                       |
 | `ALLOWED_TOOLS`           | `*`                         | Built-in tool allowlist                           |
+
+Full configuration reference: `docs/configuration.md`
 
 ## Verification
 
