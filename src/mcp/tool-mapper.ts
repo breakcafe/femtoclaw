@@ -23,18 +23,21 @@ export function mcpToolToAnthropicTool(
 
 /**
  * Parse an MCP tool name back to server name and tool name.
- * Returns null if the name doesn't match the mcp__server__tool pattern.
+ * Format: mcp__<server>__<tool>
+ * Returns null if the name doesn't match the pattern.
  */
 export function parseMcpToolName(fullName: string): { server: string; tool: string } | null {
-  const match = fullName.match(/^mcp__([^_]+(?:__[^_]+)*)__([^_]+(?:__[^_]+)*)$/);
-  if (!match) return null;
+  if (!fullName.startsWith('mcp__')) return null;
 
-  // Handle the case where server or tool name might contain double underscores
-  const parts = fullName.slice(5).split('__'); // Remove 'mcp__' prefix
+  // Remove 'mcp__' prefix and split by '__'
+  const rest = fullName.slice(5);
+  const parts = rest.split('__');
   if (parts.length < 2) return null;
 
-  // Last part is tool name, everything else is server name
+  // Last segment is the tool name, rest is the server name
   const tool = parts[parts.length - 1];
   const server = parts.slice(0, -1).join('__');
+
+  if (!server || !tool) return null;
   return { server, tool };
 }

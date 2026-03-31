@@ -2,7 +2,6 @@ import { getToolByName } from './index.js';
 import type { ToolExecutionContext, ToolResult } from '../types.js';
 import { parseMcpToolName } from '../mcp/tool-mapper.js';
 import type { McpClientPool } from '../mcp/client-pool.js';
-import type { McpServerConfig } from '../types.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolUseBlock {
@@ -25,7 +24,6 @@ export async function executeTool(
   block: ToolUseBlock,
   context: ToolExecutionContext,
   mcpClientPool: McpClientPool,
-  perRequestServers?: Record<string, McpServerConfig>,
 ): Promise<ToolResultBlock> {
   // 1. Check built-in tools
   const builtinTool = getToolByName(block.name);
@@ -50,16 +48,11 @@ export async function executeTool(
     }
   }
 
-  // 2. Check MCP tools
+  // 2. Check MCP tools (pool already has connections from discovery phase)
   const mcpParsed = parseMcpToolName(block.name);
   if (mcpParsed) {
     try {
-      const result = await mcpClientPool.callTool(
-        mcpParsed.server,
-        mcpParsed.tool,
-        block.input,
-        perRequestServers,
-      );
+      const result = await mcpClientPool.callTool(mcpParsed.server, mcpParsed.tool, block.input);
       const text = result.content.map((c) => c.text ?? '').join('\n');
       return {
         type: 'tool_result',

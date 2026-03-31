@@ -6,7 +6,7 @@ import { compactMessages } from './compaction.js';
 import { estimateMessagesTokenCount } from '../utils/token-counter.js';
 import { executeTool, type ToolUseBlock, type ToolResultBlock } from '../tools/executor.js';
 import { getAllToolDefinitions } from '../tools/index.js';
-import { mcpToolToAnthropicTool } from '../mcp/tool-mapper.js';
+import type { AnthropicToolDefinition } from '../mcp/tool-mapper.js';
 import type { McpClientPool } from '../mcp/client-pool.js';
 import type {
   StreamEvent,
@@ -84,8 +84,11 @@ export class AgentEngine {
       { timezone: input.timezone, device_type: input.device_type, locale: input.locale },
     );
 
-    // 3. Build tool list (builtin + MCP)
-    const tools = this.buildToolList(input.mcp_servers, input.mcp_context);
+    // 3. Build tool list (builtin + MCP — discovers MCP tools from connected servers)
+    const { tools, mcpWarnings } = await this.buildToolList(input.mcp_servers, input.mcp_context);
+    if (mcpWarnings.length > 0) {
+      logger.warn({ mcpWarnings }, 'MCP tool discovery warnings');
+    }
 
     // 4. Construct messages
     const messages: Array<{
@@ -294,12 +297,7 @@ export class AgentEngine {
             });
           } else {
             // Normal tool execution
-            const result = await executeTool(
-              block,
-              toolContext,
-              this.mcpClientPool,
-              input.mcp_servers,
-            );
+            const result = await executeTool(block, toolContext, this.mcpClientPool);
             toolResults.push(result);
 
             if (input.show_tool_use) {
@@ -343,6 +341,9 @@ export class AgentEngine {
       logger.warn({ conversationId: input.conversationId }, 'Agent reached max loop count');
     }
 
+    // Cleanup transient MCP connections
+    await this.mcpClientPool.cleanupTransient();
+
     return {
       content: finalText,
       usage: totalUsage,
@@ -352,20 +353,40 @@ export class AgentEngine {
     };
   }
 
-  private buildToolList(
+  private async buildToolList(
     perRequestServers?: Record<string, McpServerConfig>,
     perRequestContext?: Record<string, McpServerContext>,
-  ): Array<{ name: string; description: string; input_schema: Record<string, unknown> }> {
+  ): Promise<{
+    tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
+    mcpWarnings: string[];
+  }> {
     // Built-in tools
-    const tools = getAllToolDefinitions();
+    const tools: Array<{
+      name: string;
+      description: string;
+      input_schema: Record<string, unknown>;
+    }> = getAllToolDefinitions();
 
-    // MCP tools from merged servers
-    const mergedServers = this.mcpClientPool.mergeMcpServers(perRequestServers, perRequestContext);
-    // Note: MCP tool discovery is async and done at startup.
-    // Per-request servers would need connection and discovery at request time,
-    // which is handled by the pool.
+    // MCP tools — discover from managed + per-request servers
+    const { tools: mcpTools, warnings: mcpWarnings } = await this.mcpClientPool.getAnthropicTools(
+      perRequestServers,
+      perRequestContext,
+    );
 
-    return tools;
+    for (const mcpTool of mcpTools) {
+      tools.push(mcpTool);
+    }
+
+    logger.debug(
+      {
+        builtinCount: getAllToolDefinitions().length,
+        mcpCount: mcpTools.length,
+        total: tools.length,
+      },
+      'Tool list built',
+    );
+
+    return { tools, mcpWarnings };
   }
 
   private buildAssistantContent(text: string, toolUseBlocks: ToolUseBlock[]): string {
