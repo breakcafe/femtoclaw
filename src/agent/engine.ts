@@ -19,6 +19,30 @@ import type {
   McpServerContext,
 } from '../types.js';
 
+// ─── Anthropic ContentBlock types (subset we need) ───
+
+export type TextBlock = { type: 'text'; text: string };
+export type ToolUseContentBlock = {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
+export type ToolResultContentBlock = {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+};
+
+export type ContentBlock = TextBlock | ToolUseContentBlock | ToolResultContentBlock;
+
+/** A message in Anthropic Messages API format — content is always ContentBlock[]. */
+export interface ApiMessage {
+  role: 'user' | 'assistant';
+  content: ContentBlock[];
+}
+
 export interface AgentRunInput {
   prompt: string;
   conversationId: string;
@@ -35,14 +59,20 @@ export interface AgentRunInput {
   mcp_servers?: Record<string, McpServerConfig>;
   mcp_context?: Record<string, McpServerContext>;
   metadata?: Record<string, unknown>;
+  /** Restored history — each content is JSON-serialized ContentBlock[]. */
   existingMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export interface AgentRunResult {
+  /** Final text displayed to user. */
   content: string;
   usage: TokenUsage;
   stop_reason: string;
   model: string;
+  /**
+   * All new messages produced in this request, in Anthropic format.
+   * Each content is JSON-serialized ContentBlock[] for storage.
+   */
   newMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
@@ -67,7 +97,6 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
   ): Promise<AgentRunResult> {
     const model = input.model ?? config.DEFAULT_MODEL;
-    const startTime = Date.now();
 
     // 1. Build system prompt
     const systemBlocks = await buildSystemPrompt(input.userId, {
@@ -84,35 +113,35 @@ export class AgentEngine {
       { timezone: input.timezone, device_type: input.device_type, locale: input.locale },
     );
 
-    // 3. Build tool list (builtin + MCP — discovers MCP tools from connected servers)
+    // 3. Build tool list (builtin + MCP)
     const { tools, mcpWarnings } = await this.buildToolList(input.mcp_servers, input.mcp_context);
     if (mcpWarnings.length > 0) {
       logger.warn({ mcpWarnings }, 'MCP tool discovery warnings');
     }
 
-    // 4. Construct messages
-    const messages: Array<{
-      role: 'user' | 'assistant';
-      content: string | Array<{ type: 'text'; text: string }>;
-    }> = [];
+    // 4. Construct messages in Anthropic API format
+    const messages: ApiMessage[] = [];
 
-    // Add existing conversation history
+    // Restore history — each stored content is JSON-serialized ContentBlock[]
     if (input.existingMessages) {
       for (const msg of input.existingMessages) {
-        messages.push({ role: msg.role, content: msg.content });
+        try {
+          const parsed = JSON.parse(msg.content);
+          messages.push({ role: msg.role, content: parsed });
+        } catch {
+          // Legacy plain-text fallback
+          messages.push({ role: msg.role, content: [{ type: 'text', text: msg.content }] });
+        }
       }
     }
 
-    // Add new user message with preamble blocks
-    const userContentBlocks: Array<{ type: 'text'; text: string }> = [
-      ...preambleBlocks,
-      { type: 'text', text: input.prompt },
-    ];
-    messages.push({ role: 'user', content: userContentBlocks });
+    // Build new user message with preamble
+    const userContent: ContentBlock[] = [...preambleBlocks, { type: 'text', text: input.prompt }];
+    messages.push({ role: 'user', content: userContent });
 
-    // Track new messages for persistence
+    // Track new messages for persistence (JSON-serialized)
     const newMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      { role: 'user', content: input.prompt },
+      { role: 'user', content: JSON.stringify(userContent) },
     ];
 
     // 5. Agent loop
@@ -145,7 +174,6 @@ export class AgentEngine {
         stream: true,
       };
 
-      // Extended thinking support
       if (input.thinking) {
         (apiParams as unknown as Record<string, unknown>).thinking = {
           type: 'enabled',
@@ -153,7 +181,7 @@ export class AgentEngine {
         };
       }
 
-      // Debug: dump full API request to file (enable via DUMP_PROMPTS env var)
+      // Debug: dump full API request to file
       if (process.env.DUMP_PROMPTS && loopCount === 1) {
         const dumpPath =
           process.env.DUMP_PROMPTS === '1'
@@ -167,7 +195,9 @@ export class AgentEngine {
       // 6. Stream response
       const stream = this.anthropic.messages.stream(apiParams);
 
-      const assistantContentParts: string[] = [];
+      // Collect assistant content blocks
+      const assistantBlocks: ContentBlock[] = [];
+      let currentText = '';
       const toolUseBlocks: ToolUseBlock[] = [];
       let currentToolUse: { id: string; name: string; inputJson: string } | null = null;
 
@@ -177,7 +207,14 @@ export class AgentEngine {
         switch (event.type) {
           case 'content_block_start': {
             const block = (event as any).content_block;
-            if (block?.type === 'tool_use') {
+            if (block?.type === 'text') {
+              currentText = '';
+            } else if (block?.type === 'tool_use') {
+              // Flush any accumulated text
+              if (currentText) {
+                assistantBlocks.push({ type: 'text', text: currentText });
+                currentText = '';
+              }
               currentToolUse = { id: block.id, name: block.name, inputJson: '' };
               if (input.show_tool_use) {
                 onEvent({ type: 'tool_use', data: { tool: block.name, input: {} } });
@@ -189,7 +226,7 @@ export class AgentEngine {
           case 'content_block_delta': {
             const delta = (event as any).delta;
             if (delta?.type === 'text_delta' && delta.text) {
-              assistantContentParts.push(delta.text);
+              currentText += delta.text;
               onEvent({ type: 'text_delta', data: { text: delta.text } });
             } else if (delta?.type === 'thinking_delta' && delta.thinking) {
               onEvent({ type: 'thinking_delta', data: { thinking: delta.thinking } });
@@ -210,12 +247,22 @@ export class AgentEngine {
                   'Failed to parse tool input JSON',
                 );
               }
+              // Add tool_use block to assistant content
+              assistantBlocks.push({
+                type: 'tool_use',
+                id: currentToolUse.id,
+                name: currentToolUse.name,
+                input: parsedInput,
+              });
               toolUseBlocks.push({
                 id: currentToolUse.id,
                 name: currentToolUse.name,
                 input: parsedInput,
               });
               currentToolUse = null;
+            } else if (currentText) {
+              assistantBlocks.push({ type: 'text', text: currentText });
+              currentText = '';
             }
             break;
           }
@@ -247,14 +294,20 @@ export class AgentEngine {
         }
       }
 
-      // Build assistant message content for history
-      const assistantText = assistantContentParts.join('');
-      if (assistantText) finalText = assistantText;
+      // Flush trailing text
+      if (currentText) {
+        assistantBlocks.push({ type: 'text', text: currentText });
+      }
 
-      // Add assistant message to conversation
-      const assistantContent = this.buildAssistantContent(assistantText, toolUseBlocks);
-      messages.push({ role: 'assistant', content: assistantContent });
-      newMessages.push({ role: 'assistant', content: assistantContent });
+      // Extract final text for user-facing response
+      const textParts = assistantBlocks
+        .filter((b): b is TextBlock => b.type === 'text')
+        .map((b) => b.text);
+      if (textParts.length > 0) finalText = textParts.join('');
+
+      // Add assistant message to conversation (full structured blocks)
+      messages.push({ role: 'assistant', content: assistantBlocks });
+      newMessages.push({ role: 'assistant', content: JSON.stringify(assistantBlocks) });
 
       // 7. Process tool calls
       if (toolUseBlocks.length > 0) {
@@ -267,10 +320,9 @@ export class AgentEngine {
           memoryService: this.memoryService,
         };
 
-        const toolResults: ToolResultBlock[] = [];
+        const toolResultBlocks: ToolResultContentBlock[] = [];
 
         for (const block of toolUseBlocks) {
-          // Handle AskUserQuestion specially
           if (block.name === 'AskUserQuestion') {
             onEvent({
               type: 'input_required',
@@ -288,9 +340,7 @@ export class AgentEngine {
               },
             });
 
-            // Wait for user response
             const userResponse = await waitForUserInput(block.id);
-
             const answersText = Object.entries(userResponse.answers)
               .map(([q, a]) => {
                 const parts = [`"${q}" = "${a}"`];
@@ -301,15 +351,19 @@ export class AgentEngine {
               })
               .join('\n');
 
-            toolResults.push({
+            toolResultBlocks.push({
               type: 'tool_result',
               tool_use_id: block.id,
               content: `User answered:\n${answersText}\n\nProceed based on the user's selections.`,
             });
           } else {
-            // Normal tool execution
             const result = await executeTool(block, toolContext, this.mcpClientPool);
-            toolResults.push(result);
+            toolResultBlocks.push({
+              type: 'tool_result',
+              tool_use_id: result.tool_use_id,
+              content: result.content,
+              is_error: result.is_error,
+            });
 
             if (input.show_tool_use) {
               onEvent({
@@ -320,30 +374,35 @@ export class AgentEngine {
           }
         }
 
-        // Add tool results as user message
-        const toolResultContent = toolResults.map((r) => JSON.stringify(r)).join('\n');
+        // Add tool results as user message (structured blocks)
+        const toolResultContent: ContentBlock[] = toolResultBlocks;
         messages.push({ role: 'user', content: toolResultContent });
-        newMessages.push({ role: 'user', content: toolResultContent });
+        newMessages.push({ role: 'user', content: JSON.stringify(toolResultContent) });
       } else {
-        // No tool calls — conversation complete
         continueLoop = false;
       }
 
-      // 8. Check token budget for compaction
+      // 8. Token budget check for compaction
       const estimatedTokens = estimateMessagesTokenCount(
         messages.map((m) => ({
           role: m.role,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          content: JSON.stringify(m.content),
         })),
       );
       if (estimatedTokens > config.COMPACTION_THRESHOLD) {
         const simpleMessages = messages.map((m) => ({
           role: m.role as 'user' | 'assistant',
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          content: JSON.stringify(m.content),
         }));
         const compacted = await compactMessages(simpleMessages, this.anthropic);
         messages.length = 0;
-        messages.push(...compacted);
+        for (const cm of compacted) {
+          try {
+            messages.push({ role: cm.role, content: JSON.parse(cm.content) });
+          } catch {
+            messages.push({ role: cm.role, content: [{ type: 'text', text: cm.content }] });
+          }
+        }
       }
     }
 
@@ -352,7 +411,6 @@ export class AgentEngine {
       logger.warn({ conversationId: input.conversationId }, 'Agent reached max loop count');
     }
 
-    // Cleanup transient MCP connections
     await this.mcpClientPool.cleanupTransient();
 
     return {
@@ -371,14 +429,12 @@ export class AgentEngine {
     tools: Array<{ name: string; description: string; input_schema: Record<string, unknown> }>;
     mcpWarnings: string[];
   }> {
-    // Built-in tools
     const tools: Array<{
       name: string;
       description: string;
       input_schema: Record<string, unknown>;
     }> = getAllToolDefinitions();
 
-    // MCP tools — discover from managed + per-request servers
     const { tools: mcpTools, warnings: mcpWarnings } = await this.mcpClientPool.getAnthropicTools(
       perRequestServers,
       perRequestContext,
@@ -398,17 +454,5 @@ export class AgentEngine {
     );
 
     return { tools, mcpWarnings };
-  }
-
-  private buildAssistantContent(text: string, toolUseBlocks: ToolUseBlock[]): string {
-    if (toolUseBlocks.length === 0) return text;
-
-    // Serialize both text and tool_use blocks for storage
-    const parts: string[] = [];
-    if (text) parts.push(text);
-    for (const block of toolUseBlocks) {
-      parts.push(`[tool_use: ${block.name}(${JSON.stringify(block.input)})]`);
-    }
-    return parts.join('\n');
   }
 }

@@ -259,7 +259,19 @@ export function chatRoutes(deps: ServerDeps): Router {
     }
 
     const limit = parseInt(req.query.limit as string) || 100;
-    const messages = await conversationManager.getMessages(convId, { limit });
+    const rawMessages = await conversationManager.getMessages(convId, { limit });
+
+    // Deserialize content from JSON ContentBlock[] for API response
+    const messages = rawMessages.map((m) => {
+      let content: unknown;
+      try {
+        content = JSON.parse(m.content);
+      } catch {
+        content = m.content; // legacy plain text
+      }
+      return { ...m, content };
+    });
+
     res.json({ conversation_id: convId, messages });
   });
 
@@ -283,6 +295,13 @@ export function chatRoutes(deps: ServerDeps): Router {
   return router;
 }
 
+/**
+ * Persist all new messages from the agent run.
+ *
+ * Each message's content is JSON-serialized ContentBlock[] — the full Anthropic
+ * Messages API format including text, tool_use, and tool_result blocks.
+ * This ensures multi-turn tool calling context is preserved across requests.
+ */
 async function persistMessages(
   manager: any,
   conversationId: string,
@@ -293,27 +312,18 @@ async function persistMessages(
   const now = new Date().toISOString();
   const msgsToStore = [];
 
-  // Store user message
-  msgsToStore.push({
-    conversationId,
-    role: 'user' as const,
-    sender: body.sender ?? userId,
-    senderName: body.sender_name,
-    content: body.message!,
-    createdAt: now,
-  });
-
-  // Store assistant response
-  if (result.content) {
+  for (const msg of result.newMessages as Array<{ role: string; content: string }>) {
     msgsToStore.push({
       conversationId,
-      role: 'assistant' as const,
-      sender: config.ASSISTANT_NAME,
-      senderName: config.ASSISTANT_NAME,
-      content: result.content,
+      role: msg.role as 'user' | 'assistant',
+      sender: msg.role === 'user' ? (body.sender ?? userId) : config.ASSISTANT_NAME,
+      senderName: msg.role === 'user' ? body.sender_name : config.ASSISTANT_NAME,
+      content: msg.content, // JSON-serialized ContentBlock[]
       createdAt: now,
     });
   }
 
-  await manager.appendMessages(conversationId, msgsToStore);
+  if (msgsToStore.length > 0) {
+    await manager.appendMessages(conversationId, msgsToStore);
+  }
 }
