@@ -69,6 +69,7 @@ export class SkillManager implements SkillManagerInterface {
     return Array.from(this.skills.values()).map((s) => ({
       name: s.name,
       description: s.description,
+      whenToUse: s.whenToUse,
       triggers: s.triggers,
     }));
   }

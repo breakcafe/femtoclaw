@@ -1,6 +1,7 @@
 ---
 name: example
-description: An example skill demonstrating the skill format
+description: An example skill demonstrating the skill format.
+whenToUse: When the user asks for a demo or example of how the skill system works.
 triggers: example,demo,test skill
 ---
 

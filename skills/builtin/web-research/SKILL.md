@@ -1,6 +1,7 @@
 ---
 name: web-research
-description: Search the web and fetch pages to answer questions about current events, products, or topics.
+description: Search the web and fetch pages for current information.
+whenToUse: When the user needs information beyond your training data, asks about current events, recent products, or real-time data.
 triggers: search,look up,find,latest,news,what is,查一下,搜索,最新
 ---
 

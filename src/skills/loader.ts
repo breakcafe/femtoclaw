@@ -56,6 +56,15 @@ export function loadSkillsFromDirectory(
 
         const name = metadata.name ?? entry.name;
         const description = metadata.description ?? '';
+        const whenToUse = metadata.whenToUse ?? metadata.when_to_use ?? undefined;
+        const argumentHint = metadata.argumentHint ?? metadata.argument_hint ?? undefined;
+        const aliases = metadata.aliases
+          ? metadata.aliases
+              .replace(/[\[\]]/g, '')
+              .split(',')
+              .map((a) => a.trim())
+              .filter(Boolean)
+          : undefined;
         const triggers = metadata.triggers
           ? metadata.triggers
               .split(',')
@@ -66,6 +75,9 @@ export function loadSkillsFromDirectory(
         skills.push({
           name,
           description,
+          whenToUse,
+          argumentHint,
+          aliases,
           triggers,
           content: raw,
           source,

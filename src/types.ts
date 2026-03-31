@@ -59,7 +59,15 @@ export interface WriteMemoryInput {
 export interface SkillDefinition {
   name: string;
   description: string;
+  /** When this skill should be invoked — shown in listing alongside description. */
+  whenToUse?: string;
+  /** Hint for argument format (e.g., "-m 'message'"). */
+  argumentHint?: string;
+  /** Alternative names the agent can use to invoke this skill. */
+  aliases?: string[];
+  /** Trigger keywords for intent matching (femtoclaw extension, compatible). */
   triggers: string[];
+  /** Full SKILL.md content returned when skill is invoked. */
   content: string;
   source: 'builtin' | 'org' | 'user';
 }
@@ -67,6 +75,7 @@ export interface SkillDefinition {
 export interface SkillManifestEntry {
   name: string;
   description: string;
+  whenToUse?: string;
   triggers: string[];
 }
 

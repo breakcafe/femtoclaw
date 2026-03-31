@@ -1,6 +1,7 @@
 ---
 name: data-query
-description: Query user's financial and consumption data via MCP tools. Supports time ranges, categories, and trends.
+description: Query user's financial and consumption data via MCP tools.
+whenToUse: When the user asks about spending, income, budgets, trends, or any financial data query.
 triggers: spending,expense,income,cost,budget,trend,consume,how much,花了多少,消费,支出,收入,账单,预算,趋势
 ---
 

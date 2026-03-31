@@ -243,18 +243,25 @@ function loadOrgInstructions(): string | null {
   return null;
 }
 
+/**
+ * Render skill manifest in Claude Code-compatible format.
+ *
+ * Format matches Claude Code's SkillTool prompt.ts:
+ *   - {name}: {description} - {whenToUse}
+ *
+ * Budget: per-entry descriptions are capped at MAX_LISTING_DESC_CHARS (250).
+ */
+const MAX_LISTING_DESC_CHARS = 250;
+
 function renderSkillManifest(skills: SkillManifestEntry[]): string {
-  const lines = [
-    'The following skills can be loaded using the Skill tool:',
-    '',
-    '<available-skills>',
-  ];
+  const lines = ['The following skills are available for use with the Skill tool:', ''];
   for (const s of skills) {
-    lines.push(
-      `<skill name="${s.name}" description="${s.description}" triggers="${s.triggers.join(',')}" />`,
-    );
+    let desc = s.whenToUse ? `${s.description} - ${s.whenToUse}` : s.description;
+    if (desc.length > MAX_LISTING_DESC_CHARS) {
+      desc = desc.slice(0, MAX_LISTING_DESC_CHARS - 1) + '\u2026';
+    }
+    lines.push(`- ${s.name}: ${desc}`);
   }
-  lines.push('</available-skills>');
   return lines.join('\n');
 }
 
