@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 import { config } from '../config.js';
 import { renderTemplate } from '../utils/template.js';
 import type {
@@ -211,14 +212,28 @@ export async function buildUserMessagePreamble(
 
 // ─── Helpers ───
 
+/**
+ * Load org instructions with fallback chain:
+ * 1. ORG_INSTRUCTIONS_PATH env var (explicit override)
+ * 2. config/org-instructions.md (default shipped with the project)
+ */
 function loadOrgInstructions(): string | null {
-  const path = config.ORG_INSTRUCTIONS_PATH;
-  if (!path || !existsSync(path)) return null;
-  try {
-    return readFileSync(path, 'utf-8');
-  } catch {
-    return null;
+  const candidates = [config.ORG_INSTRUCTIONS_PATH, resolve('config/org-instructions.md')].filter(
+    Boolean,
+  );
+
+  for (const p of candidates) {
+    if (p && existsSync(p)) {
+      try {
+        const content = readFileSync(p, 'utf-8');
+        logger.debug({ path: p }, 'Loaded org instructions');
+        return content;
+      } catch {
+        continue;
+      }
+    }
   }
+  return null;
 }
 
 function renderSkillManifest(skills: SkillManifestEntry[]): string {
