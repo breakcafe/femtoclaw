@@ -1,12 +1,13 @@
 #!/usr/bin/env npx tsx
 /**
  * Kapii MCP server integration test (separate from main test to avoid checking in URLs)
- * Usage: KAPII_MCP_URL=http://... npx tsx scripts/test-mcp-kapii.ts
+ * Usage: KAPII_MCP_URL=http://... KAPII_USER_ID=... npx tsx scripts/test-mcp-kapii.ts
  */
 import { McpClientPool } from '../src/mcp/client-pool.js';
 import type { McpServerConfig } from '../src/types.js';
 
-const KAPII_URL = process.env.KAPII_MCP_URL || 'http://next-int.kapii.cn/kapii-mcp-server-go/kapii/mcp';
+const KAPII_URL = process.env.KAPII_MCP_URL;
+const KAPII_USER_ID = process.env.KAPII_USER_ID;
 
 const DIM = '\x1b[2m';
 const GREEN = '\x1b[32m';
@@ -20,6 +21,13 @@ function timer() {
 }
 
 async function main() {
+  if (!KAPII_URL) {
+    throw new Error('KAPII_MCP_URL is required');
+  }
+  if (!KAPII_USER_ID) {
+    throw new Error('KAPII_USER_ID is required');
+  }
+
   console.log(`\n${'='.repeat(60)}`);
   console.log('  KAPII MCP INTEGRATION TEST');
   console.log(`${'='.repeat(60)}`);
@@ -55,7 +63,7 @@ async function main() {
         t = timer();
         try {
           const result = await pool.callTool('kapii', mcpName, {
-            user_id: 'CAOZHENXING',
+            user_id: KAPII_USER_ID,
           });
           const ms2 = t();
           const text = result.content.map((c) => c.text ?? '').join('').slice(0, 500);

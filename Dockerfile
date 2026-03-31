@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Install with dev dependencies so prepare hooks can resolve local binaries,
+# then prune down to the production dependency set used by the runtime image.
+RUN npm ci && npm prune --omit=dev
 
 # ─── Stage 3: Runtime (minimal) ───
 FROM node:22-slim AS runtime
