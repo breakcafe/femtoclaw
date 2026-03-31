@@ -57,7 +57,10 @@ export function loadSkillsFromDirectory(
         const name = metadata.name ?? entry.name;
         const description = metadata.description ?? '';
         const triggers = metadata.triggers
-          ? metadata.triggers.split(',').map((t) => t.trim()).filter(Boolean)
+          ? metadata.triggers
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
           : [];
 
         skills.push({

@@ -67,9 +67,7 @@ export const TodoWriteTool: ToolDefinition = {
 
       case 'list': {
         if (todos.length === 0) return { type: 'text', text: 'No tasks.' };
-        const lines = todos.map(
-          (t) => `- [${t.status}] ${t.id}: ${t.text}`,
-        );
+        const lines = todos.map((t) => `- [${t.status}] ${t.id}: ${t.text}`);
         return { type: 'text', text: lines.join('\n') };
       }
 

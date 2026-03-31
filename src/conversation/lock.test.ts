@@ -13,9 +13,7 @@ describe('ConversationLock', () => {
     const lock = new ConversationLock();
     const release = await lock.acquire('conv-1');
 
-    await expect(lock.acquire('conv-1', { wait: false })).rejects.toThrow(
-      ConversationBusyError,
-    );
+    await expect(lock.acquire('conv-1', { wait: false })).rejects.toThrow(ConversationBusyError);
 
     release();
   });

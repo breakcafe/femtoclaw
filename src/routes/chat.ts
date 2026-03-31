@@ -152,8 +152,7 @@ export function chatRoutes(deps: ServerDeps): Router {
         const result = await agentEngine.run(
           agentInput,
           (event: StreamEvent) => sseWriter.write(event),
-          (toolUseId: string) =>
-            conversationManager.waitForUserInput(conversation.id, toolUseId),
+          (toolUseId: string) => conversationManager.waitForUserInput(conversation.id, toolUseId),
           abortController.signal,
         );
 
@@ -181,8 +180,7 @@ export function chatRoutes(deps: ServerDeps): Router {
               awaitingInput = true;
             }
           },
-          (toolUseId: string) =>
-            conversationManager.waitForUserInput(conversation.id, toolUseId),
+          (toolUseId: string) => conversationManager.waitForUserInput(conversation.id, toolUseId),
           abortController.signal,
         );
 

@@ -8,11 +8,7 @@ export class SkillManager implements SkillManagerInterface {
   private orgSkillsDir?: string;
   private userSkillsDir?: string;
 
-  constructor(
-    builtinDir: string,
-    orgSkillsDir?: string,
-    userSkillsDir?: string,
-  ) {
+  constructor(builtinDir: string, orgSkillsDir?: string, userSkillsDir?: string) {
     this.builtinDir = builtinDir;
     this.orgSkillsDir = orgSkillsDir;
     this.userSkillsDir = userSkillsDir;

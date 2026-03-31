@@ -1,7 +1,12 @@
 import { readFileSync, existsSync } from 'fs';
 import { config } from '../config.js';
 import { renderTemplate } from '../utils/template.js';
-import type { SkillManagerInterface, MemoryServiceInterface, SkillManifestEntry, MemoryEntrySummary } from '../types.js';
+import type {
+  SkillManagerInterface,
+  MemoryServiceInterface,
+  SkillManifestEntry,
+  MemoryEntrySummary,
+} from '../types.js';
 import { logger } from '../utils/logger.js';
 
 // ─── Core System Prompt ───
@@ -223,7 +228,9 @@ function renderSkillManifest(skills: SkillManifestEntry[]): string {
     '<available-skills>',
   ];
   for (const s of skills) {
-    lines.push(`<skill name="${s.name}" description="${s.description}" triggers="${s.triggers.join(',')}" />`);
+    lines.push(
+      `<skill name="${s.name}" description="${s.description}" triggers="${s.triggers.join(',')}" />`,
+    );
   }
   lines.push('</available-skills>');
   return lines.join('\n');
@@ -233,7 +240,7 @@ function renderMemoryContext(memories: MemoryEntrySummary[]): string {
   const truncated = memories.slice(0, config.MAX_MEMORY_INDEX_IN_PROMPT);
   const lines = [
     '# User Memory',
-    'Below are saved memory summaries for this user. Use Memory tool\'s read action for full details.',
+    "Below are saved memory summaries for this user. Use Memory tool's read action for full details.",
     '',
     '<user-memory>',
   ];

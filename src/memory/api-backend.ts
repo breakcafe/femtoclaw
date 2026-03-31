@@ -1,4 +1,10 @@
-import type { MemoryServiceInterface, MemoryEntry, MemoryEntrySummary, MemoryType, WriteMemoryInput } from '../types.js';
+import type {
+  MemoryServiceInterface,
+  MemoryEntry,
+  MemoryEntrySummary,
+  MemoryType,
+  WriteMemoryInput,
+} from '../types.js';
 
 export class ApiMemoryService implements MemoryServiceInterface {
   constructor(

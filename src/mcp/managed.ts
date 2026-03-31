@@ -8,9 +8,7 @@ const RESERVED_NAME = 'femtoclaw';
  * Load managed MCP server configs from a JSON file.
  * Format: { "mcpServers": { "name": McpServerConfig, ... } }
  */
-export function loadManagedMcpServers(
-  configPath: string,
-): Record<string, McpServerConfig> {
+export function loadManagedMcpServers(configPath: string): Record<string, McpServerConfig> {
   if (!existsSync(configPath)) {
     logger.debug({ path: configPath }, 'No managed MCP config found');
     return {};

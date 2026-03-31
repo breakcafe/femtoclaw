@@ -31,9 +31,7 @@ export class ApiConversationStore implements ConversationStore {
 
   async getConversation(conversationId: string, userId: string): Promise<Conversation | null> {
     try {
-      return await this.request<Conversation>(
-        `/conversations/${conversationId}?userId=${userId}`,
-      );
+      return await this.request<Conversation>(`/conversations/${conversationId}?userId=${userId}`);
     } catch {
       return null;
     }

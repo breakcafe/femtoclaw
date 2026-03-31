@@ -26,8 +26,7 @@ export const WebFetchTool: ToolDefinition = {
     try {
       const response = await fetch(url, {
         headers: {
-          'User-Agent':
-            'Mozilla/5.0 (compatible; Femtoclaw/0.1; +https://github.com/femtoclaw)',
+          'User-Agent': 'Mozilla/5.0 (compatible; Femtoclaw/0.1; +https://github.com/femtoclaw)',
         },
         signal: AbortSignal.timeout(15000),
       });

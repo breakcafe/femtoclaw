@@ -15,7 +15,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   // No token configured — auth disabled
   if (!config.API_TOKEN) {
     req.userContext = {
-      userId: req.headers['x-user-id'] as string ?? 'anonymous',
+      userId: (req.headers['x-user-id'] as string) ?? 'anonymous',
       displayName: req.headers['x-user-name'] as string,
       timezone: req.headers['x-timezone'] as string,
       locale: req.headers['x-locale'] as string,
@@ -37,7 +37,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   req.userContext = {
-    userId: req.headers['x-user-id'] as string ?? 'default',
+    userId: (req.headers['x-user-id'] as string) ?? 'default',
     displayName: req.headers['x-user-name'] as string,
     timezone: req.headers['x-timezone'] as string,
     locale: req.headers['x-locale'] as string,

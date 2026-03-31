@@ -9,14 +9,17 @@ interface RateLimitEntry {
 const userLimits = new Map<string, RateLimitEntry>();
 
 // Cleanup stale entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of userLimits) {
-    if (entry.resetAt <= now) {
-      userLimits.delete(key);
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [key, entry] of userLimits) {
+      if (entry.resetAt <= now) {
+        userLimits.delete(key);
+      }
     }
-  }
-}, 5 * 60 * 1000).unref();
+  },
+  5 * 60 * 1000,
+).unref();
 
 export function rateLimitMiddleware(req: Request, res: Response, next: NextFunction): void {
   if (config.RATE_LIMIT_RPM <= 0) {

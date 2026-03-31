@@ -112,9 +112,7 @@ Memory types (type field, required for write):
             input.category as any,
           );
           if (results.length === 0) return { type: 'text', text: 'No matching memories found.' };
-          const lines = results.map(
-            (e) => `- [${e.type}] ${e.key}: ${e.description}`,
-          );
+          const lines = results.map((e) => `- [${e.type}] ${e.key}: ${e.description}`);
           return { type: 'text', text: lines.join('\n') };
         }
 

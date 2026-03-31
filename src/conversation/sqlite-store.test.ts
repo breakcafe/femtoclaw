@@ -48,8 +48,18 @@ describe('SqliteConversationStore', () => {
   it('should append and get messages', async () => {
     const conv = await store.createConversation('user-1');
     const ids = await store.appendMessages(conv.id, [
-      { conversationId: conv.id, role: 'user', content: 'Hello', createdAt: new Date().toISOString() },
-      { conversationId: conv.id, role: 'assistant', content: 'Hi there', createdAt: new Date().toISOString() },
+      {
+        conversationId: conv.id,
+        role: 'user',
+        content: 'Hello',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        conversationId: conv.id,
+        role: 'assistant',
+        content: 'Hi there',
+        createdAt: new Date().toISOString(),
+      },
     ]);
     expect(ids.length).toBe(2);
 
@@ -66,7 +76,12 @@ describe('SqliteConversationStore', () => {
   it('should delete conversation and cascade messages', async () => {
     const conv = await store.createConversation('user-1');
     await store.appendMessages(conv.id, [
-      { conversationId: conv.id, role: 'user', content: 'Test', createdAt: new Date().toISOString() },
+      {
+        conversationId: conv.id,
+        role: 'user',
+        content: 'Test',
+        createdAt: new Date().toISOString(),
+      },
     ]);
 
     await store.deleteConversation(conv.id, 'user-1');
@@ -81,12 +96,27 @@ describe('SqliteConversationStore', () => {
   it('should replace messages', async () => {
     const conv = await store.createConversation('user-1');
     await store.appendMessages(conv.id, [
-      { conversationId: conv.id, role: 'user', content: 'Old msg', createdAt: new Date().toISOString() },
+      {
+        conversationId: conv.id,
+        role: 'user',
+        content: 'Old msg',
+        createdAt: new Date().toISOString(),
+      },
     ]);
 
     await store.replaceMessages(conv.id, [
-      { conversationId: conv.id, role: 'user', content: 'Summary', createdAt: new Date().toISOString() },
-      { conversationId: conv.id, role: 'assistant', content: 'Acknowledged', createdAt: new Date().toISOString() },
+      {
+        conversationId: conv.id,
+        role: 'user',
+        content: 'Summary',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        conversationId: conv.id,
+        role: 'assistant',
+        content: 'Acknowledged',
+        createdAt: new Date().toISOString(),
+      },
     ]);
 
     const messages = await store.getMessages(conv.id);

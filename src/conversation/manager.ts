@@ -20,10 +20,7 @@ export class ConversationManager {
     private lock: ConversationLock,
   ) {}
 
-  async getOrCreateConversation(
-    userId: string,
-    conversationId?: string,
-  ): Promise<Conversation> {
+  async getOrCreateConversation(userId: string, conversationId?: string): Promise<Conversation> {
     if (conversationId) {
       const existing = await this.store.getConversation(conversationId, userId);
       if (!existing) throw new ConversationNotFoundError(conversationId);
@@ -76,10 +73,7 @@ export class ConversationManager {
     return this.store.deleteConversation(conversationId, userId);
   }
 
-  async updateMetadata(
-    conversationId: string,
-    metadata: Record<string, unknown>,
-  ): Promise<void> {
+  async updateMetadata(conversationId: string, metadata: Record<string, unknown>): Promise<void> {
     return this.store.updateConversation(conversationId, { metadata });
   }
 

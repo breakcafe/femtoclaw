@@ -88,7 +88,10 @@ export class AgentEngine {
     const tools = this.buildToolList(input.mcp_servers, input.mcp_context);
 
     // 4. Construct messages
-    const messages: Array<{ role: 'user' | 'assistant'; content: string | Array<{ type: 'text'; text: string }> }> = [];
+    const messages: Array<{
+      role: 'user' | 'assistant';
+      content: string | Array<{ type: 'text'; text: string }>;
+    }> = [];
 
     // Add existing conversation history
     if (input.existingMessages) {
@@ -186,9 +189,7 @@ export class AgentEngine {
             if (currentToolUse) {
               let parsedInput: Record<string, unknown> = {};
               try {
-                parsedInput = currentToolUse.inputJson
-                  ? JSON.parse(currentToolUse.inputJson)
-                  : {};
+                parsedInput = currentToolUse.inputJson ? JSON.parse(currentToolUse.inputJson) : {};
               } catch {
                 logger.warn(
                   { tool: currentToolUse.name, json: currentToolUse.inputJson },
@@ -311,9 +312,7 @@ export class AgentEngine {
         }
 
         // Add tool results as user message
-        const toolResultContent = toolResults
-          .map((r) => JSON.stringify(r))
-          .join('\n');
+        const toolResultContent = toolResults.map((r) => JSON.stringify(r)).join('\n');
         messages.push({ role: 'user', content: toolResultContent });
         newMessages.push({ role: 'user', content: toolResultContent });
       } else {

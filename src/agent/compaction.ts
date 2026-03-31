@@ -25,7 +25,11 @@ export async function compactMessages(
   const recentMessages = messages.slice(-KEEP_RECENT);
 
   logger.info(
-    { totalMessages: messages.length, compacting: oldMessages.length, keeping: recentMessages.length },
+    {
+      totalMessages: messages.length,
+      compacting: oldMessages.length,
+      keeping: recentMessages.length,
+    },
     'Compacting conversation history',
   );
 
@@ -33,19 +37,17 @@ export async function compactMessages(
     const summary = await anthropicClient.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
-      system: 'Summarize the following conversation history concisely. Preserve key information, user preferences, decisions made, and pending action items.',
+      system:
+        'Summarize the following conversation history concisely. Preserve key information, user preferences, decisions made, and pending action items.',
       messages: [
         {
           role: 'user',
-          content: JSON.stringify(
-            oldMessages.map((m) => ({ role: m.role, content: m.content })),
-          ),
+          content: JSON.stringify(oldMessages.map((m) => ({ role: m.role, content: m.content }))),
         },
       ],
     });
 
-    const summaryText =
-      summary.content[0].type === 'text' ? summary.content[0].text : '';
+    const summaryText = summary.content[0].type === 'text' ? summary.content[0].text : '';
 
     const compacted: CompactableMessage[] = [
       {
@@ -59,10 +61,7 @@ export async function compactMessages(
       ...recentMessages,
     ];
 
-    logger.info(
-      { before: messages.length, after: compacted.length },
-      'Compaction complete',
-    );
+    logger.info({ before: messages.length, after: compacted.length }, 'Compaction complete');
 
     return compacted;
   } catch (err) {

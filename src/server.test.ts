@@ -79,9 +79,7 @@ describe('Server', () => {
   });
 
   it('POST /chat without message should return 400', async () => {
-    const res = await request(app)
-      .post('/chat')
-      .send({});
+    const res = await request(app).post('/chat').send({});
     expect(res.status).toBe(400);
   });
 

@@ -1,5 +1,11 @@
 import Database from 'better-sqlite3';
-import type { MemoryServiceInterface, MemoryEntry, MemoryEntrySummary, MemoryType, WriteMemoryInput } from '../types.js';
+import type {
+  MemoryServiceInterface,
+  MemoryEntry,
+  MemoryEntrySummary,
+  MemoryType,
+  WriteMemoryInput,
+} from '../types.js';
 import { config } from '../config.js';
 
 export class SqliteMemoryService implements MemoryServiceInterface {
@@ -30,7 +36,8 @@ export class SqliteMemoryService implements MemoryServiceInterface {
   }
 
   async listMemories(userId: string, category?: MemoryType): Promise<MemoryEntrySummary[]> {
-    let query = 'SELECT key, type, description, tags, updated_at, source FROM memories WHERE user_id = ?';
+    let query =
+      'SELECT key, type, description, tags, updated_at, source FROM memories WHERE user_id = ?';
     const params: unknown[] = [userId];
     if (category) {
       query += ' AND type = ?';

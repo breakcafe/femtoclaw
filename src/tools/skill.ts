@@ -3,7 +3,7 @@ import type { ToolDefinition } from '../types.js';
 export const SkillTool: ToolDefinition = {
   name: 'Skill',
   description:
-    'Load the full instructions of a specified skill. Call this when the user\'s request matches a known skill from the available skills list.',
+    "Load the full instructions of a specified skill. Call this when the user's request matches a known skill from the available skills list.",
   input_schema: {
     type: 'object',
     properties: {

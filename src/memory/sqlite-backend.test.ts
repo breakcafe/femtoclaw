@@ -53,12 +53,16 @@ describe('SqliteMemoryService', () => {
 
   it('should filter by category', async () => {
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'Role', value: 'Designer',
+      key: 'user.role',
+      type: 'user',
+      description: 'Role',
+      value: 'Designer',
     });
     await service.writeMemory('user-1', {
-      key: 'feedback.no_emoji', type: 'feedback',
-      description: 'No emoji', value: 'Do not use emoji',
+      key: 'feedback.no_emoji',
+      type: 'feedback',
+      description: 'No emoji',
+      value: 'Do not use emoji',
     });
 
     const userOnly = await service.listMemories('user-1', 'user');
@@ -68,12 +72,16 @@ describe('SqliteMemoryService', () => {
 
   it('should search memories by keyword', async () => {
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'User is a designer', value: 'Product designer at Acme',
+      key: 'user.role',
+      type: 'user',
+      description: 'User is a designer',
+      value: 'Product designer at Acme',
     });
     await service.writeMemory('user-1', {
-      key: 'project.deadline', type: 'project',
-      description: 'Q2 deadline', value: 'Ship by 2026-06-30',
+      key: 'project.deadline',
+      type: 'project',
+      description: 'Q2 deadline',
+      value: 'Ship by 2026-06-30',
     });
 
     const results = await service.searchMemory('user-1', 'designer');
@@ -83,8 +91,10 @@ describe('SqliteMemoryService', () => {
 
   it('should delete a memory entry', async () => {
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'Role', value: 'Designer',
+      key: 'user.role',
+      type: 'user',
+      description: 'Role',
+      value: 'Designer',
     });
 
     await service.deleteMemory('user-1', 'user.role');
@@ -94,12 +104,16 @@ describe('SqliteMemoryService', () => {
 
   it('should upsert on write', async () => {
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'V1', value: 'Designer',
+      key: 'user.role',
+      type: 'user',
+      description: 'V1',
+      value: 'Designer',
     });
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'V2', value: 'Senior Designer',
+      key: 'user.role',
+      type: 'user',
+      description: 'V2',
+      value: 'Senior Designer',
     });
 
     const entry = await service.readMemory('user-1', 'user.role');
@@ -111,8 +125,10 @@ describe('SqliteMemoryService', () => {
 
   it('should isolate memories between users', async () => {
     await service.writeMemory('user-1', {
-      key: 'user.role', type: 'user',
-      description: 'User 1 role', value: 'Designer',
+      key: 'user.role',
+      type: 'user',
+      description: 'User 1 role',
+      value: 'Designer',
     });
 
     const list = await service.listMemories('user-2');
