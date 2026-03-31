@@ -54,6 +54,13 @@ export interface Config {
   ENABLE_MCP: boolean;
 
   /**
+   * When true, requests without X-User-Id header are rejected with 400.
+   * When false (default), missing X-User-Id falls back to 'anonymous'.
+   * Production deployments should set this to true.
+   */
+  REQUIRE_USER_ID: boolean;
+
+  /**
    * Allowed built-in tools.
    * Comma-separated list or "*" for all. Tools not in this list are hidden
    * from Claude (it won't see or invoke them). The executor still recognizes
@@ -124,5 +131,6 @@ export const config: Config = {
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
 
   ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
+  REQUIRE_USER_ID: env('REQUIRE_USER_ID', 'false') === 'true',
   ALLOWED_TOOLS: env('ALLOWED_TOOLS', '*'),
 };

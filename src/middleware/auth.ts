@@ -12,32 +12,34 @@ declare global {
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  // No token configured — auth disabled
-  if (!config.API_TOKEN) {
-    req.userContext = {
-      userId: (req.headers['x-user-id'] as string) ?? 'anonymous',
-      displayName: req.headers['x-user-name'] as string,
-      timezone: req.headers['x-timezone'] as string,
-      locale: req.headers['x-locale'] as string,
-    };
-    next();
-    return;
+  // Token-based auth when API_TOKEN is configured
+  if (config.API_TOKEN) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing or invalid Authorization header' });
+      return;
+    }
+
+    const token = authHeader.slice(7);
+    if (token !== config.API_TOKEN) {
+      res.status(401).json({ error: 'Invalid token' });
+      return;
+    }
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing or invalid Authorization header' });
-    return;
-  }
+  // User identity from X-User-Id header
+  const rawUserId = req.headers['x-user-id'] as string | undefined;
 
-  const token = authHeader.slice(7);
-  if (token !== config.API_TOKEN) {
-    res.status(401).json({ error: 'Invalid token' });
+  if (!rawUserId && config.REQUIRE_USER_ID) {
+    res.status(400).json({
+      error: 'X-User-Id header is required',
+      hint: 'Set REQUIRE_USER_ID=false to allow anonymous access',
+    });
     return;
   }
 
   req.userContext = {
-    userId: (req.headers['x-user-id'] as string) ?? 'anonymous',
+    userId: rawUserId ?? 'anonymous',
     displayName: req.headers['x-user-name'] as string,
     timezone: req.headers['x-timezone'] as string,
     locale: req.headers['x-locale'] as string,

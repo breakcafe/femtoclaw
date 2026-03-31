@@ -23,7 +23,9 @@ Authorization: Bearer <API_TOKEN>
 
 Missing or invalid tokens receive `401 Unauthorized`.
 
-**Auth-free mode:** When `API_TOKEN` is empty or unset, authentication is disabled. This is intended for local development or deployments behind a trusted network boundary (VPC, API Gateway with its own auth layer). The user identity falls back to `x-user-id` header or `anonymous`.
+**Auth-free mode:** When `API_TOKEN` is empty or unset, authentication is disabled. This is intended for local development or deployments behind a trusted network boundary (VPC, API Gateway with its own auth layer). The user identity falls back to `X-User-Id` header or `anonymous`.
+
+**User identity enforcement:** Set `REQUIRE_USER_ID=true` in production to reject requests that do not carry an `X-User-Id` header. Without this, all requests without the header share a single `anonymous` user space, which breaks data isolation.
 
 ### 2. No Shell or Filesystem Exposure
 

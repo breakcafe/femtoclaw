@@ -86,11 +86,12 @@ Notes:
 
 ### Request Shaping
 
-| Variable           | Default  | Purpose                                 |
-| ------------------ | -------- | --------------------------------------- |
-| `RATE_LIMIT_RPM`   | `60`     | Per-user request rate limit             |
-| `INPUT_TIMEOUT_MS` | `300000` | Pending `AskUserQuestion` expiry        |
-| `ALLOWED_TOOLS`    | `*`      | Comma-separated built-in tool allowlist |
+| Variable           | Default  | Purpose                                                  |
+| ------------------ | -------- | -------------------------------------------------------- |
+| `RATE_LIMIT_RPM`   | `60`     | Per-user request rate limit                              |
+| `INPUT_TIMEOUT_MS` | `300000` | Pending `AskUserQuestion` expiry                         |
+| `REQUIRE_USER_ID`  | `false`  | When `true`, reject requests without `X-User-Id` header  |
+| `ALLOWED_TOOLS`    | `*`      | Comma-separated built-in tool allowlist                  |
 
 ## Files And Directories
 
