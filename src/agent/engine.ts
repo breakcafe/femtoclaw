@@ -153,6 +153,17 @@ export class AgentEngine {
         };
       }
 
+      // Debug: dump full API request to file (enable via DUMP_PROMPTS env var)
+      if (process.env.DUMP_PROMPTS && loopCount === 1) {
+        const dumpPath =
+          process.env.DUMP_PROMPTS === '1'
+            ? `/tmp/femtoclaw-prompt-dump-${Date.now()}.json`
+            : process.env.DUMP_PROMPTS;
+        const { writeFileSync } = await import('fs');
+        writeFileSync(dumpPath, JSON.stringify(apiParams, null, 2), 'utf-8');
+        logger.info({ dumpPath, toolCount: tools.length }, 'Prompt dumped to file');
+      }
+
       // 6. Stream response
       const stream = this.anthropic.messages.stream(apiParams);
 
