@@ -145,8 +145,11 @@ export class AgentEngine {
       }
     }
 
-    // Build new user message with preamble
-    const userContent: ContentBlock[] = [...preambleBlocks, { type: 'text', text: input.prompt }];
+    // Build new user message: preamble blocks + actual message (with cache_control on last block)
+    const userContent: ContentBlock[] = [
+      ...preambleBlocks,
+      { type: 'text', text: input.prompt, cache_control: { type: 'ephemeral' } } as any,
+    ];
     messages.push({ role: 'user', content: userContent });
 
     // Track new messages for persistence (JSON-serialized)

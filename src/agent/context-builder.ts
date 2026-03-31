@@ -268,8 +268,9 @@ function renderSkillManifest(skills: SkillManifestEntry[]): string {
 function renderMemoryContext(memories: MemoryEntrySummary[]): string {
   const truncated = memories.slice(0, config.MAX_MEMORY_INDEX_IN_PROMPT);
   const lines = [
-    '# User Memory',
-    "Below are saved memory summaries for this user. Use Memory tool's read action for full details.",
+    "As you answer the user's questions, you can use the following context:",
+    '# userMemory',
+    "Saved memory entries for this user. Use Memory tool's read action for full content.",
     '',
     '<user-memory>',
   ];

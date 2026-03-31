@@ -6,7 +6,8 @@ const SHELL_COMMAND_PATTERN =
   /\b(?:bash|sh|zsh|curl|wget|rm\s+-rf|cat\s+\/|chmod|chown|sudo|apt(?:-get)?|npm|pnpm|yarn)\b/i;
 const FILESYSTEM_PATTERN =
   /\b(?:read|write|delete|remove|copy)\b[\s\S]{0,80}\b(?:file|directory)\b|(?:^|[\s`(])\/(?:tmp|etc|var|usr|home|root)\//im;
-const DESTRUCTIVE_PATTERN = /\brm\s+-rf\b|\bdelete\b[\s\S]{0,40}\b\/(?:tmp|etc|var|usr|home|root)\//i;
+const DESTRUCTIVE_PATTERN =
+  /\brm\s+-rf\b|\bdelete\b[\s\S]{0,40}\b\/(?:tmp|etc|var|usr|home|root)\//i;
 
 export function analyzeSkillSafety(content: string): SkillSafetyAnalysis {
   const warnings: string[] = [];
