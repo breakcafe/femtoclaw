@@ -1,44 +1,33 @@
 # Femtoclaw
 
-Lightweight conversational Agent service with multi-user isolation, Skills mechanism, and MCP (Model Context Protocol) support.
+Lightweight conversational Agent service with multi-user isolation, Skills, and MCP support.
 
-## Overview
+## What Is Implemented
 
-Femtoclaw is a consumer-facing Agent service built directly on the Anthropic Messages API. Unlike picoclaw, it does **not** use the Claude Agent SDK or Docker for isolation — instead it implements business-layer isolation with a minimal, safe tool set.
-
-### Key Features
-
-- **Multi-user session isolation** — each user's conversations, memories, and skills are fully isolated
-- **Skills system** — 3-tier skill loading (builtin > org > user) with runtime injection
-- **MCP support** — managed MCP servers + per-request dynamic servers + auth context overlay
-- **Streaming** — SSE streaming with text deltas, thinking, tool use events
-- **Memory** — persistent cross-session memory with 4 types (user/feedback/project/reference)
-- **Interactive tools** — AskUserQuestion with pause/resume mechanism
-- **Picoclaw-compatible API** — `POST /chat`, `GET /chat`, SSE events
-
-## Safety Boundary
-
-Femtoclaw does not expose shell or filesystem tools. A `SKILL.md` file can instruct the model to run `bash`, `curl`, read `/etc/passwd`, or write `/tmp/...`, but the skill text does not grant those capabilities.
-
-- Built-in tools are limited to `Skill`, `WebSearch`, `WebFetch`, `Memory`, `TodoWrite`, `SendMessage`, and `AskUserQuestion` plus any MCP tools you explicitly attach.
-- Skills containing shell, direct filesystem, or destructive command instructions are flagged with `safetyWarnings`.
-- When such a skill is loaded through the `Skill` tool, Femtoclaw prepends a runtime safety reminder telling the model to use only exposed tools.
+- Direct Anthropic Messages API runtime, no Claude Agent SDK
+- Multi-user conversation isolation with per-conversation locking
+- Skills loading from `builtin`, optional org, and optional user directories
+- MCP support for managed servers, per-request servers, HTTP/SSE/stdio transports, and request-scoped context overlay
+- Built-in tools: `Skill`, `WebSearch`, `WebFetch`, `Memory`, `TodoWrite`, `SendMessage`, `AskUserQuestion`
+- `AskUserQuestion` pause/resume flow for both SSE and non-streaming `/chat`
+- Memory backends: `sqlite`, `api`, `mcp`
 
 ## Quick Start
 
 ```bash
-# Install
 npm install
-
-# Development
+cp .env.example .env
 ANTHROPIC_API_KEY=sk-ant-xxx npm run dev
+```
 
-# Production
+Production:
+
+```bash
 npm run build
 ANTHROPIC_API_KEY=sk-ant-xxx npm start
 ```
 
-### Docker
+## Docker
 
 ```bash
 docker build --platform linux/amd64 -t femtoclaw .
@@ -47,85 +36,116 @@ docker run --rm -p 9000:9000 \
   femtoclaw
 ```
 
-## API
+## Chat API
 
-### Send a message
+Basic request:
 
 ```bash
 curl -X POST http://localhost:9000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!"}'
+  -d '{"message":"你好","stream":false}'
 ```
 
-### Streaming
+Streaming:
 
 ```bash
 curl -N -X POST http://localhost:9000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!", "stream": true}'
+  -d '{"message":"帮我查一下最近的新闻","stream":true}'
 ```
 
-### With authentication
-
-```bash
-# Set API_TOKEN env var on the server, then:
-curl -X POST http://localhost:9000/chat \
-  -H "Authorization: Bearer your-token" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello!"}'
-```
-
-### With MCP servers
+Resume an `AskUserQuestion` turn:
 
 ```bash
 curl -X POST http://localhost:9000/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Query my data",
-    "mcp_servers": {
-      "my-api": {
-        "type": "http",
-        "url": "http://example.com/mcp"
-      }
+    "conversation_id":"conv_xxx",
+    "stream":false,
+    "input_response":{
+      "tool_use_id":"toolu_xxx",
+      "answers":{"你希望包含哪些部分？":"消费, 预算"}
     }
   }'
 ```
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check (no auth) |
-| `POST` | `/chat` | Send message / continue conversation |
-| `GET` | `/chat` | List conversations |
-| `GET` | `/chat/:id` | Get conversation metadata |
-| `GET` | `/chat/:id/messages` | Get message history |
-| `DELETE` | `/chat/:id` | Delete conversation |
-| `GET` | `/skills` | List available skills |
-| `POST` | `/admin/reload-skills` | Reload skills |
+| Method   | Path                   | Description                              |
+| -------- | ---------------------- | ---------------------------------------- |
+| `GET`    | `/health`              | Health check                             |
+| `POST`   | `/chat`                | Send message or resume a paused question |
+| `GET`    | `/chat`                | List current user's conversations        |
+| `GET`    | `/chat/:id`            | Conversation metadata                    |
+| `GET`    | `/chat/:id/messages`   | Conversation history                     |
+| `DELETE` | `/chat/:id`            | Delete a conversation                    |
+| `GET`    | `/skills`              | Effective skill manifest                 |
+| `POST`   | `/admin/reload-skills` | Reload skills from disk                  |
 
-`GET /skills` includes any `safetyWarnings` detected from the underlying `SKILL.md` files.
+## Skills
+
+Current build supports three tiers through directories:
+
+- Built-in: `BUILTIN_SKILLS_DIR`, default `./skills/builtin`
+- Org: `ORG_SKILLS_URL`, currently interpreted as a local path or `file://` URL
+- User: `USER_SKILLS_DIR`, default `./skills/user`
+
+Remote HTTP skill bundles are not implemented in this build.
+
+## MCP
+
+Managed MCP servers are loaded from `config/managed-mcp.json`.
+
+Supported transports:
+
+- `http` with automatic SSE fallback
+- `sse`
+- `stdio`
+
+Per-request MCP servers can be attached through `POST /chat { mcp_servers, mcp_context }`.
+
+## Web Tools
+
+- `WebSearch` uses DuckDuckGo HTML search by default and returns parsed top results.
+- `WebFetch` fetches `http`/`https` content only.
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | (required) | Anthropic API key |
-| `PORT` | `9000` | HTTP server port |
-| `API_TOKEN` | (empty) | Bearer token; empty = no auth |
-| `DEFAULT_MODEL` | `claude-sonnet-4-20250514` | Default Claude model |
-| `ASSISTANT_NAME` | `Femtoclaw` | Agent display name |
-| `SQLITE_DB_PATH` | `./data/femtoclaw.db` | Database path |
-| `LOG_LEVEL` | `info` | Log level |
-| `MAX_EXECUTION_MS` | `300000` | Request timeout |
-| `RATE_LIMIT_RPM` | `60` | Per-user rate limit |
+Important variables:
 
-See `CLAUDE.md` for full configuration reference.
+| Variable                  | Default                     | Description                                       |
+| ------------------------- | --------------------------- | ------------------------------------------------- |
+| `PORT`                    | `9000`                      | HTTP port                                         |
+| `API_TOKEN`               | empty                       | Bearer token auth                                 |
+| `DEFAULT_MODEL`           | `claude-sonnet-4-20250514`  | Default Anthropic model                           |
+| `SQLITE_DB_PATH`          | `./data/femtoclaw.db`       | Shared SQLite path for conversation + memory      |
+| `CONVERSATION_STORE_TYPE` | `sqlite`                    | `sqlite` or `api`                                 |
+| `MEMORY_SERVICE_TYPE`     | `sqlite`                    | `sqlite`, `api`, or `mcp`                         |
+| `MEMORY_MCP_SERVER`       | `memory`                    | MCP server name used by `MEMORY_SERVICE_TYPE=mcp` |
+| `ORG_SKILLS_URL`          | empty                       | Local org skills path or `file://` URL            |
+| `USER_SKILLS_DIR`         | `./skills/user`             | Optional user skill directory                     |
+| `MANAGED_MCP_CONFIG`      | `./config/managed-mcp.json` | Managed MCP config file                           |
+| `INPUT_TIMEOUT_MS`        | `300000`                    | Pending question expiration                       |
+| `ALLOWED_TOOLS`           | `*`                         | Built-in tool allowlist                           |
+
+## Verification
+
+Latest local verification:
+
+```bash
+npm run build
+npm test
+npm run format:check
+```
+
+At the time of the latest update these commands passed with 49 tests.
+
+## Notes
+
+- Non-streaming `AskUserQuestion` returns HTTP `202` with `status: "awaiting_input"`.
+- Streaming `AskUserQuestion` emits `input_required`, then `message_paused`, and the client resumes with a new `POST /chat`.
+- Pending paused questions expire after `INPUT_TIMEOUT_MS`; this build does not auto-run a background continuation after expiry.
 
 ## Architecture
 
-See `docs/architecture-design.md` for the complete architecture document.
-
-## License
-
-MIT
+Primary design document: `../docs/architecture-design.md`
