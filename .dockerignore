@@ -1,0 +1,15 @@
+node_modules
+dist
+data
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+.git
+.cache
+coverage
+*.tgz
+*.log
+dev-data

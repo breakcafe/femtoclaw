@@ -213,6 +213,11 @@ export function chatRoutes(deps: ServerDeps): Router {
           message_id: messageId,
           error: message,
         });
+      } else if (res.getHeader('Content-Type')?.toString().includes('text/event-stream')) {
+        // SSE stream already started — send error event and close
+        const sseError = `event: error\ndata: ${JSON.stringify({ error: message })}\n\n`;
+        res.write(sseError);
+        res.end();
       }
     } finally {
       clearTimeout(timeoutHandle);
