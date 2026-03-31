@@ -1,1 +1,7 @@
-export type { ToolDefinition, ToolResult, ToolExecutionContext } from '../types.js';
+export type {
+  AskUserQuestionItem,
+  AskUserQuestionOption,
+  ToolDefinition,
+  ToolExecutionContext,
+  ToolResult,
+} from '../types.js';

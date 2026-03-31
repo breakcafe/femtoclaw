@@ -52,26 +52,29 @@ export function chatRoutes(deps: ServerDeps): Router {
     const body = parsed.data as ChatRequest;
     const userId = req.userContext?.userId ?? 'anonymous';
     const messageId = `msg-${randomUUID()}`;
+    const pausedInput = body.conversation_id
+      ? conversationManager.getPausedInput(body.conversation_id)
+      : null;
 
-    // Handle input_response (AskUserQuestion answer)
     if (body.input_response) {
       if (!body.conversation_id) {
         res.status(400).json({ error: 'conversation_id required for input_response' });
         return;
       }
-      try {
-        conversationManager.submitUserInput(body.conversation_id, body.input_response);
-        // The agent loop will resume and send the response via the original SSE stream.
-        // For now, acknowledge the submission.
-        res.json({ status: 'accepted', conversation_id: body.conversation_id });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        res.status(400).json({ error: message });
+
+      if (!pausedInput) {
+        try {
+          conversationManager.submitUserInput(body.conversation_id, body.input_response);
+          res.json({ status: 'accepted', conversation_id: body.conversation_id });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          res.status(400).json({ error: message });
+        }
+        return;
       }
-      return;
     }
 
-    if (!body.message) {
+    if (!body.message && !body.input_response) {
       res.status(400).json({ error: 'message or input_response is required' });
       return;
     }
@@ -120,8 +123,12 @@ export function chatRoutes(deps: ServerDeps): Router {
         content: m.content,
       }));
 
+      const resumeInputResponse = body.input_response
+        ? conversationManager.consumePausedInput(conversation.id, body.input_response)
+        : undefined;
+
       const agentInput: AgentRunInput = {
-        prompt: body.message,
+        prompt: body.message ?? '',
         conversationId: conversation.id,
         userId,
         messageId,
@@ -138,6 +145,8 @@ export function chatRoutes(deps: ServerDeps): Router {
         allowed_tools: body.allowed_tools,
         metadata: body.metadata,
         existingMessages,
+        resumeInputResponse,
+        pauseOnInput: true,
       };
 
       const isStreaming = body.stream !== false;
@@ -161,6 +170,16 @@ export function chatRoutes(deps: ServerDeps): Router {
         // Persist messages
         await persistMessages(conversationManager, conversation.id, body, result, userId);
 
+        if (result.awaiting_input) {
+          conversationManager.registerPausedInput(
+            conversation.id,
+            result.awaiting_input.tool_use_id,
+            result.awaiting_input.questions,
+          );
+          sseWriter.end();
+          return;
+        }
+
         sseWriter.write({
           type: 'message_complete',
           data: {
@@ -172,16 +191,10 @@ export function chatRoutes(deps: ServerDeps): Router {
       } else {
         // Non-streaming
         const collector = new StreamCollector();
-        let awaitingInput = false;
 
         const result = await agentEngine.run(
           agentInput,
-          (event: StreamEvent) => {
-            collector.push(event);
-            if (event.type === 'input_required') {
-              awaitingInput = true;
-            }
-          },
+          (event: StreamEvent) => collector.push(event),
           (toolUseId: string) => conversationManager.waitForUserInput(conversation.id, toolUseId),
           abortController.signal,
         );
@@ -190,6 +203,25 @@ export function chatRoutes(deps: ServerDeps): Router {
         await persistMessages(conversationManager, conversation.id, body, result, userId);
 
         const durationMs = Date.now() - startTime;
+
+        if (result.awaiting_input) {
+          conversationManager.registerPausedInput(
+            conversation.id,
+            result.awaiting_input.tool_use_id,
+            result.awaiting_input.questions,
+          );
+
+          const response: ChatResponse = {
+            status: 'awaiting_input',
+            conversation_id: conversation.id,
+            message_id: messageId,
+            input_required: result.awaiting_input,
+            duration_ms: durationMs,
+          };
+
+          res.status(202).json(response);
+          return;
+        }
 
         const response: ChatResponse = {
           status: abortController.signal.aborted ? 'timeout' : 'success',

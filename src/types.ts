@@ -125,6 +125,20 @@ export interface ToolResult {
   content?: string;
 }
 
+// ─── Interactive Questions ───
+
+export interface AskUserQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface AskUserQuestionItem {
+  question: string;
+  header: string;
+  options: AskUserQuestionOption[];
+  multiSelect?: boolean;
+}
+
 // ─── Streaming ───
 
 export type StreamEvent =
@@ -133,7 +147,10 @@ export type StreamEvent =
   | { type: 'thinking_delta'; data: { thinking: string } }
   | { type: 'tool_use'; data: { tool: string; input: unknown } }
   | { type: 'tool_result'; data: { tool: string; content: unknown } }
-  | { type: 'input_required'; data: { type: string; tool_use_id: string; questions: unknown[] } }
+  | {
+      type: 'input_required';
+      data: { type: string; tool_use_id: string; questions: AskUserQuestionItem[] };
+    }
   | { type: 'message_paused'; data: { reason: string; resume_hint?: string } }
   | { type: 'message_complete'; data: { usage?: TokenUsage; stop_reason?: string } }
   | { type: 'error'; data: { error: string; code?: string } };
@@ -186,7 +203,7 @@ export interface ChatResponse {
   input_required?: {
     type: string;
     tool_use_id: string;
-    questions: unknown[];
+    questions: AskUserQuestionItem[];
     timeout_ms: number;
   };
   error?: string;

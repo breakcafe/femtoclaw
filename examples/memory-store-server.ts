@@ -65,6 +65,22 @@ app.get('/memory/:userId/all', async (req, res) => {
   }
 });
 
+// ─── Search ───
+app.get('/memory/:userId/search', async (req, res) => {
+  try {
+    const query = req.query.q as string;
+    const category = req.query.category as string | undefined;
+    if (!query) {
+      res.status(400).json({ error: 'q query param required' });
+      return;
+    }
+    const results = await service.searchMemory(req.params.userId, query, category as any);
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.get('/memory/:userId/:key', async (req, res) => {
   try {
     const entry = await service.readMemory(req.params.userId, req.params.key);
@@ -94,22 +110,6 @@ app.delete('/memory/:userId/:key', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(404).json({ error: (err as Error).message });
-  }
-});
-
-// ─── Search ───
-app.get('/memory/:userId/search', async (req, res) => {
-  try {
-    const query = req.query.q as string;
-    const category = req.query.category as string | undefined;
-    if (!query) {
-      res.status(400).json({ error: 'q query param required' });
-      return;
-    }
-    const results = await service.searchMemory(req.params.userId, query, category as any);
-    res.json(results);
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
   }
 });
 

@@ -53,7 +53,24 @@ export async function executeTool(
   if (mcpParsed) {
     try {
       const result = await mcpClientPool.callTool(mcpParsed.server, mcpParsed.tool, block.input);
-      const text = result.content.map((c) => c.text ?? '').join('\n');
+      const text = result.content
+        .map((block) => {
+          if (block.type === 'text') {
+            return block.text ?? '';
+          }
+          if (block.type === 'resource') {
+            return block.resource?.text ?? block.resource?.uri ?? '';
+          }
+          if (block.type === 'resource_link') {
+            return `${block.name}: ${block.uri}`;
+          }
+          if (block.type === 'image') {
+            return `[image:${block.mimeType ?? 'unknown'}]`;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
       return {
         type: 'tool_result',
         tool_use_id: block.id,

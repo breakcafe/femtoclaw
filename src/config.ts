@@ -21,6 +21,7 @@ export interface Config {
   MEMORY_SERVICE_TYPE: 'sqlite' | 'mcp' | 'api';
   MEMORY_SERVICE_URL: string;
   MEMORY_SERVICE_API_KEY: string;
+  MEMORY_MCP_SERVER: string;
   MAX_MEMORY_ENTRIES_PER_USER: number;
   MAX_MEMORY_VALUE_LENGTH: number;
   MAX_MEMORY_INDEX_IN_PROMPT: number;
@@ -35,6 +36,7 @@ export interface Config {
   // Skills
   BUILTIN_SKILLS_DIR: string;
   ORG_SKILLS_URL: string;
+  USER_SKILLS_DIR: string;
 
   // MCP
   MANAGED_MCP_CONFIG: string;
@@ -95,6 +97,7 @@ export const config: Config = {
   MEMORY_SERVICE_TYPE: env('MEMORY_SERVICE_TYPE', 'sqlite') as Config['MEMORY_SERVICE_TYPE'],
   MEMORY_SERVICE_URL: env('MEMORY_SERVICE_URL'),
   MEMORY_SERVICE_API_KEY: env('MEMORY_SERVICE_API_KEY'),
+  MEMORY_MCP_SERVER: env('MEMORY_MCP_SERVER', 'memory'),
   MAX_MEMORY_ENTRIES_PER_USER: envInt('MAX_MEMORY_ENTRIES_PER_USER', 200),
   MAX_MEMORY_VALUE_LENGTH: envInt('MAX_MEMORY_VALUE_LENGTH', 2000),
   MAX_MEMORY_INDEX_IN_PROMPT: envInt('MAX_MEMORY_INDEX_IN_PROMPT', 50),
@@ -110,6 +113,7 @@ export const config: Config = {
 
   BUILTIN_SKILLS_DIR: env('BUILTIN_SKILLS_DIR', './skills/builtin'),
   ORG_SKILLS_URL: env('ORG_SKILLS_URL'),
+  USER_SKILLS_DIR: env('USER_SKILLS_DIR', './skills/user'),
 
   MANAGED_MCP_CONFIG: env('MANAGED_MCP_CONFIG', './config/managed-mcp.json'),
 

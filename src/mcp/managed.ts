@@ -4,6 +4,54 @@ import { logger } from '../utils/logger.js';
 
 const RESERVED_NAME = 'femtoclaw';
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+function validateServerConfig(name: string, raw: unknown): McpServerConfig | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    logger.warn({ name }, 'Invalid MCP config entry, expected an object');
+    return null;
+  }
+
+  const cfg = raw as Record<string, unknown>;
+  const type = (cfg.type as string | undefined) ?? 'http';
+
+  if (type === 'http' || type === 'sse') {
+    if (typeof cfg.url !== 'string' || !cfg.url) {
+      logger.warn({ name, type }, 'Invalid MCP config entry, url is required');
+      return null;
+    }
+    return {
+      type,
+      url: cfg.url,
+      headers: isStringRecord(cfg.headers) ? cfg.headers : undefined,
+    };
+  }
+
+  if (type === 'stdio') {
+    if (typeof cfg.command !== 'string' || !cfg.command) {
+      logger.warn({ name }, 'Invalid MCP stdio config entry, command is required');
+      return null;
+    }
+    return {
+      type,
+      command: cfg.command,
+      args: Array.isArray(cfg.args)
+        ? cfg.args.filter((arg): arg is string => typeof arg === 'string')
+        : undefined,
+      env: isStringRecord(cfg.env) ? cfg.env : undefined,
+    };
+  }
+
+  logger.warn({ name, type }, 'Invalid MCP config entry, unsupported transport type');
+  return null;
+}
+
 /**
  * Load managed MCP server configs from a JSON file.
  * Format: { "mcpServers": { "name": McpServerConfig, ... } }
@@ -26,7 +74,11 @@ export function loadManagedMcpServers(configPath: string): Record<string, McpSer
         logger.warn({ name }, 'Reserved MCP server name in managed config, skipping');
         continue;
       }
-      result[name] = cfg;
+      const validated = validateServerConfig(name, cfg);
+      if (!validated) {
+        continue;
+      }
+      result[name] = validated;
     }
 
     logger.info(

@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { McpServerConfig, McpServerContext } from '../types.js';
 import type { McpToolDefinition, McpCallToolResult } from './types.js';
@@ -260,9 +261,30 @@ export class McpClientPool {
       await client.connect(transport);
       logger.info({ name, type: 'sse' }, 'Connected via SSE');
       return client;
+    } else if (type === 'stdio' && cfg.command) {
+      const transport = new StdioClientTransport({
+        command: cfg.command,
+        args: cfg.args,
+        env: cfg.env,
+        stderr: 'pipe',
+      });
+      const stderr = transport.stderr;
+      if (stderr) {
+        stderr.on('data', (chunk) => {
+          const text = chunk.toString().trim();
+          if (text) {
+            logger.debug({ name, stderr: text }, 'MCP stdio server stderr');
+          }
+        });
+      }
+      await client.connect(transport);
+      logger.info({ name, type: 'stdio' }, 'Connected via stdio');
+      return client;
     }
 
-    throw new Error(`Unsupported MCP transport type "${type}" or missing url for server "${name}"`);
+    throw new Error(
+      `Unsupported MCP transport type "${type}" or missing connection details for server "${name}"`,
+    );
   }
 
   private applyContext(

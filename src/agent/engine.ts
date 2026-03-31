@@ -9,6 +9,7 @@ import { getAllToolDefinitions } from '../tools/index.js';
 import type { AnthropicToolDefinition } from '../mcp/tool-mapper.js';
 import type { McpClientPool } from '../mcp/client-pool.js';
 import type {
+  AskUserQuestionItem,
   StreamEvent,
   TokenUsage,
   InputResponse,
@@ -63,6 +64,10 @@ export interface AgentRunInput {
   metadata?: Record<string, unknown>;
   /** Restored history — each content is JSON-serialized ContentBlock[]. */
   existingMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** Resume an interrupted AskUserQuestion flow without sending a new prompt. */
+  resumeInputResponse?: InputResponse;
+  /** When true, AskUserQuestion returns awaiting_input instead of blocking the HTTP request. */
+  pauseOnInput?: boolean;
 }
 
 export interface AgentRunResult {
@@ -76,6 +81,48 @@ export interface AgentRunResult {
    * Each content is JSON-serialized ContentBlock[] for storage.
    */
   newMessages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  awaiting_input?: {
+    type: 'ask_user_question';
+    tool_use_id: string;
+    questions: AskUserQuestionItem[];
+    timeout_ms: number;
+  };
+}
+
+function normalizeQuestions(raw: unknown): AskUserQuestionItem[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((item): item is AskUserQuestionItem => {
+      return (
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as AskUserQuestionItem).question === 'string' &&
+        typeof (item as AskUserQuestionItem).header === 'string' &&
+        Array.isArray((item as AskUserQuestionItem).options)
+      );
+    })
+    .slice(0, 4);
+}
+
+function buildUserInputToolResult(response: InputResponse): ToolResultContentBlock {
+  const answersText = Object.entries(response.answers)
+    .map(([question, answer]) => {
+      const parts = [`"${question}" = "${answer}"`];
+      if (response.annotations?.[question]?.notes) {
+        parts.push(`User note: ${response.annotations[question].notes}`);
+      }
+      return parts.join(' ');
+    })
+    .join('\n');
+
+  return {
+    type: 'tool_result',
+    tool_use_id: response.tool_use_id,
+    content: `User answered:\n${answersText}\n\nProceed based on the user's selections.`,
+  };
 }
 
 export class AgentEngine {
@@ -145,17 +192,23 @@ export class AgentEngine {
       }
     }
 
-    // Build new user message: preamble blocks + actual message (with cache_control on last block)
-    const userContent: ContentBlock[] = [
-      ...preambleBlocks,
-      { type: 'text', text: input.prompt, cache_control: { type: 'ephemeral' } } as any,
-    ];
-    messages.push({ role: 'user', content: userContent });
+    const newMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
-    // Track new messages for persistence (JSON-serialized)
-    const newMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      { role: 'user', content: JSON.stringify(userContent) },
-    ];
+    if (input.resumeInputResponse) {
+      const toolResultContent: ContentBlock[] = [
+        buildUserInputToolResult(input.resumeInputResponse),
+      ];
+      messages.push({ role: 'user', content: toolResultContent });
+      newMessages.push({ role: 'user', content: JSON.stringify(toolResultContent) });
+    } else {
+      // Build new user message: preamble blocks + actual message (with cache_control on last block)
+      const userContent: ContentBlock[] = [
+        ...preambleBlocks,
+        { type: 'text', text: input.prompt, cache_control: { type: 'ephemeral' } } as any,
+      ];
+      messages.push({ role: 'user', content: userContent });
+      newMessages.push({ role: 'user', content: JSON.stringify(userContent) });
+    }
 
     // 5. Agent loop
     let totalUsage: TokenUsage = { input_tokens: 0, output_tokens: 0 };
@@ -337,12 +390,13 @@ export class AgentEngine {
 
         for (const block of toolUseBlocks) {
           if (block.name === 'AskUserQuestion') {
+            const questions = normalizeQuestions(block.input.questions);
             onEvent({
               type: 'input_required',
               data: {
                 type: 'ask_user_question',
                 tool_use_id: block.id,
-                questions: (block.input.questions as unknown[]) ?? [],
+                questions,
               },
             });
             onEvent({
@@ -353,22 +407,25 @@ export class AgentEngine {
               },
             });
 
-            const userResponse = await waitForUserInput(block.id);
-            const answersText = Object.entries(userResponse.answers)
-              .map(([q, a]) => {
-                const parts = [`"${q}" = "${a}"`];
-                if (userResponse.annotations?.[q]?.notes) {
-                  parts.push(`User note: ${userResponse.annotations[q].notes}`);
-                }
-                return parts.join(' ');
-              })
-              .join('\n');
+            if (input.pauseOnInput) {
+              await this.mcpClientPool.cleanupTransient();
+              return {
+                content: finalText,
+                usage: totalUsage,
+                stop_reason: 'awaiting_input',
+                model,
+                newMessages,
+                awaiting_input: {
+                  type: 'ask_user_question',
+                  tool_use_id: block.id,
+                  questions,
+                  timeout_ms: config.INPUT_TIMEOUT_MS,
+                },
+              };
+            }
 
-            toolResultBlocks.push({
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: `User answered:\n${answersText}\n\nProceed based on the user's selections.`,
-            });
+            const userResponse = await waitForUserInput(block.id);
+            toolResultBlocks.push(buildUserInputToolResult(userResponse));
           } else {
             const result = await executeTool(block, toolContext, this.mcpClientPool);
             toolResultBlocks.push({

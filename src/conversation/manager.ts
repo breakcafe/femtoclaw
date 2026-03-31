@@ -1,6 +1,11 @@
 import type { ConversationStore } from './store.js';
 import { ConversationLock, ConversationBusyError } from './lock.js';
-import type { Conversation, ConversationMessage, InputResponse } from '../types.js';
+import type {
+  AskUserQuestionItem,
+  Conversation,
+  ConversationMessage,
+  InputResponse,
+} from '../types.js';
 import { config } from '../config.js';
 
 interface PendingInput {
@@ -10,10 +15,18 @@ interface PendingInput {
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
+interface PausedInput {
+  toolUseId: string;
+  questions: AskUserQuestionItem[];
+  expiresAt: number;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
 export { ConversationBusyError };
 
 export class ConversationManager {
   private pendingInputs = new Map<string, PendingInput>();
+  private pausedInputs = new Map<string, PausedInput>();
 
   constructor(
     private store: ConversationStore,
@@ -100,8 +113,78 @@ export class ConversationManager {
     pending.resolve(response);
   }
 
+  registerPausedInput(
+    conversationId: string,
+    toolUseId: string,
+    questions: AskUserQuestionItem[],
+  ): void {
+    const existing = this.pausedInputs.get(conversationId);
+    if (existing) {
+      clearTimeout(existing.timeoutId);
+    }
+
+    const expiresAt = Date.now() + config.INPUT_TIMEOUT_MS;
+    const timeoutId = setTimeout(() => {
+      this.pausedInputs.delete(conversationId);
+    }, config.INPUT_TIMEOUT_MS);
+    timeoutId.unref?.();
+
+    this.pausedInputs.set(conversationId, {
+      toolUseId,
+      questions,
+      expiresAt,
+      timeoutId,
+    });
+  }
+
+  getPausedInput(conversationId: string): {
+    toolUseId: string;
+    questions: AskUserQuestionItem[];
+    timeoutMs: number;
+  } | null {
+    const pending = this.pausedInputs.get(conversationId);
+    if (!pending) {
+      return null;
+    }
+
+    const timeoutMs = pending.expiresAt - Date.now();
+    if (timeoutMs <= 0) {
+      clearTimeout(pending.timeoutId);
+      this.pausedInputs.delete(conversationId);
+      return null;
+    }
+
+    return {
+      toolUseId: pending.toolUseId,
+      questions: pending.questions,
+      timeoutMs,
+    };
+  }
+
+  consumePausedInput(conversationId: string, response: InputResponse): InputResponse {
+    const pending = this.pausedInputs.get(conversationId);
+    if (!pending) {
+      throw new Error('No paused input request for this conversation');
+    }
+
+    const timeoutMs = pending.expiresAt - Date.now();
+    if (timeoutMs <= 0) {
+      clearTimeout(pending.timeoutId);
+      this.pausedInputs.delete(conversationId);
+      throw new Error('User input request expired');
+    }
+
+    if (pending.toolUseId !== response.tool_use_id) {
+      throw new Error('tool_use_id mismatch');
+    }
+
+    clearTimeout(pending.timeoutId);
+    this.pausedInputs.delete(conversationId);
+    return response;
+  }
+
   hasPendingInput(conversationId: string): boolean {
-    return this.pendingInputs.has(conversationId);
+    return this.pendingInputs.has(conversationId) || this.pausedInputs.has(conversationId);
   }
 }
 

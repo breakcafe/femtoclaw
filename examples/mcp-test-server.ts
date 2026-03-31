@@ -46,12 +46,9 @@ function createMcpServer(): McpServer {
     async ({ text }) => ({ content: [{ type: 'text', text: `Echo: ${text}` }] }),
   );
 
-  server.tool(
-    'get_time',
-    'Get the current server time in ISO 8601 format.',
-    {},
-    async () => ({ content: [{ type: 'text', text: new Date().toISOString() }] }),
-  );
+  server.tool('get_time', 'Get the current server time in ISO 8601 format.', {}, async () => ({
+    content: [{ type: 'text', text: new Date().toISOString() }],
+  }));
 
   server.tool(
     'add_note',
@@ -102,7 +99,9 @@ function createMcpServer(): McpServer {
       try {
         if (!/^[\d\s+\-*/().]+$/.test(expression)) {
           return {
-            content: [{ type: 'text', text: 'Invalid expression: only numbers and operators allowed' }],
+            content: [
+              { type: 'text', text: 'Invalid expression: only numbers and operators allowed' },
+            ],
             isError: true,
           };
         }
@@ -160,7 +159,7 @@ app.delete('/mcp', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', tools: 6, sessions: transports.size });
+  res.json({ status: 'ok', tools: 7, sessions: sessions.size });
 });
 
 app.listen(PORT, () => {
