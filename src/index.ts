@@ -10,6 +10,11 @@ import { McpClientPool } from './mcp/client-pool.js';
 
 async function main(): Promise<void> {
   logger.info('Starting Femtoclaw...');
+  if (!config.ANTHROPIC_API_KEY) {
+    logger.warn(
+      'ANTHROPIC_API_KEY is empty. Set ANTHROPIC_API_KEY (or X_API_KEY/API_KEY) to avoid auth failures.',
+    );
+  }
 
   // Initialize storage
   const conversationStore = createConversationStore();

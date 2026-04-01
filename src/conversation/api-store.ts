@@ -7,31 +7,56 @@ export class ApiConversationStore implements ConversationStore {
     private apiKey: string,
   ) {}
 
+  private buildHeaders(extra?: RequestInit['headers']): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.apiKey?.trim()) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
+    }
+    if (!extra) {
+      return headers;
+    }
+    return { ...headers, ...(extra as Record<string, string>) };
+  }
+
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const resp = await fetch(`${this.baseUrl}${path}`, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers: this.buildHeaders(options?.headers),
     });
     if (!resp.ok) {
       throw new Error(`ConversationStore API error: ${resp.status} ${await resp.text()}`);
     }
-    return resp.json() as Promise<T>;
+    if (resp.status === 204) {
+      return undefined as T;
+    }
+    const text = await resp.text();
+    if (!text.trim()) {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
 
   async createConversation(userId: string, conversationId?: string): Promise<Conversation> {
-    return this.request<Conversation>('/conversations', {
+    return this.openConversation(userId, conversationId);
+  }
+
+  async openConversation(
+    userId: string,
+    conversationId?: string,
+    idleTimeoutSeconds: number = 1800,
+  ): Promise<Conversation> {
+    return this.request<Conversation>('/conversations/open', {
       method: 'POST',
-      body: JSON.stringify({ userId, conversationId }),
+      body: JSON.stringify({ userId, conversationId, idleTimeoutSeconds }),
     });
   }
 
   async getConversation(conversationId: string, userId: string): Promise<Conversation | null> {
     try {
-      return await this.request<Conversation>(`/conversations/${conversationId}?userId=${userId}`);
+      const params = new URLSearchParams({ userId });
+      return await this.request<Conversation>(`/conversations/${conversationId}?${params}`);
     } catch {
       return null;
     }
@@ -48,7 +73,8 @@ export class ApiConversationStore implements ConversationStore {
   }
 
   async deleteConversation(conversationId: string, userId: string): Promise<void> {
-    await this.request(`/conversations/${conversationId}?userId=${userId}`, {
+    const params = new URLSearchParams({ userId });
+    await this.request(`/conversations/${conversationId}?${params}`, {
       method: 'DELETE',
     });
   }

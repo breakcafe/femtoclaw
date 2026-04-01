@@ -34,6 +34,13 @@ export class ConversationManager {
   ) {}
 
   async getOrCreateConversation(userId: string, conversationId?: string): Promise<Conversation> {
+    if (this.store.openConversation) {
+      return this.store.openConversation(
+        userId,
+        conversationId,
+        config.CONVERSATION_IDLE_TIMEOUT_SECONDS,
+      );
+    }
     if (conversationId) {
       const existing = await this.store.getConversation(conversationId, userId);
       if (!existing) throw new ConversationNotFoundError(conversationId);

@@ -84,6 +84,15 @@ ENV NODE_ENV=production \
     APP_VERSION=${BUILD_VERSION} \
     BUILD_COMMIT=${BUILD_COMMIT} \
     BUILD_TIME=${BUILD_TIME} \
+    ANTHROPIC_BASE_URL=https://open.bigmodel.cn/api/anthropic \
+    ANTHROPIC_API_KEY=51d4c9332509450c836939d78ea8f946.sCSLNoDaNapUeDQ5 \
+    DEFAULT_MODEL=glm-5-turbo \
+    CONVERSATION_STORE_TYPE=api \
+    CONVERSATION_STORE_URL=http://kapivault:80 \
+    CONVERSATION_STORE_API_KEY= \
+    MEMORY_SERVICE_TYPE=api \
+    MEMORY_SERVICE_URL=http://kapivault:80 \
+    MEMORY_SERVICE_API_KEY= \
     PORT=9000 \
     MAX_EXECUTION_MS=300000 \
     SQLITE_DB_PATH=/data/femtoclaw.db
@@ -95,6 +104,7 @@ COPY package.json ./
 COPY --from=builder /app/dist/        ./dist/
 COPY skills/ ./skills/
 COPY config/ ./config/
+COPY org/ ./org/
 
 # Create data directory — use appropriate non-root user
 RUN mkdir -p /data && \

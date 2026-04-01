@@ -1,3 +1,8 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "kapi": {
+      "type": "http",
+      "url": "http://kapii-mcp-server-go:8887/mcp"
+    }
+  }
 }

@@ -31,6 +31,7 @@ export interface Config {
   CONVERSATION_STORE_TYPE: 'sqlite' | 'api';
   CONVERSATION_STORE_URL: string;
   CONVERSATION_STORE_API_KEY: string;
+  CONVERSATION_IDLE_TIMEOUT_SECONDS: number;
   SQLITE_DB_PATH: string;
 
   // Skills
@@ -91,7 +92,7 @@ export const config: Config = {
   LOG_LEVEL: env('LOG_LEVEL', 'info'),
   DEFAULT_TIMEZONE: env('DEFAULT_TIMEZONE', 'UTC'),
 
-  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY'),
+  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY', env('X_API_KEY', env('API_KEY'))),
   ANTHROPIC_BASE_URL: env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
   DEFAULT_MODEL: env('DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
   FALLBACK_MODEL: env('FALLBACK_MODEL'),
@@ -116,15 +117,16 @@ export const config: Config = {
   ) as Config['CONVERSATION_STORE_TYPE'],
   CONVERSATION_STORE_URL: env('CONVERSATION_STORE_URL'),
   CONVERSATION_STORE_API_KEY: env('CONVERSATION_STORE_API_KEY'),
+  CONVERSATION_IDLE_TIMEOUT_SECONDS: envInt('CONVERSATION_IDLE_TIMEOUT_SECONDS', 1800),
   SQLITE_DB_PATH: env('SQLITE_DB_PATH', './data/femtoclaw.db'),
 
   BUILTIN_SKILLS_DIR: env('BUILTIN_SKILLS_DIR', './skills/builtin'),
   ORG_SKILLS_URL: env('ORG_SKILLS_URL'),
   USER_SKILLS_DIR: env('USER_SKILLS_DIR', './skills/user'),
 
-  MANAGED_MCP_CONFIG: env('MANAGED_MCP_CONFIG', './config/managed-mcp.json'),
+  MANAGED_MCP_CONFIG: env('MANAGED_MCP_CONFIG', '/app/org/managed-mcp.json'),
 
-  ORG_INSTRUCTIONS_PATH: env('ORG_INSTRUCTIONS_PATH'),
+  ORG_INSTRUCTIONS_PATH: env('ORG_INSTRUCTIONS_PATH', '/app/org/claude.md'),
 
   RATE_LIMIT_RPM: envInt('RATE_LIMIT_RPM', 60),
 
