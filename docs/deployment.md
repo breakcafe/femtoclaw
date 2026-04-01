@@ -180,6 +180,132 @@ Per-conversation locks are in-memory, so the load balancer must route requests f
 
 ---
 
+## External Storage Services
+
+In single-instance mode, Femtoclaw uses a local SQLite file for both conversation history and user memory. For horizontal scaling, these must be replaced with shared external services.
+
+The codebase ships two ready-to-run reference microservices under `examples/`. These can be used directly for small-scale shared deployments, or replaced with custom implementations that follow the same REST contracts (documented in `docs/architecture.md`).
+
+### Conversation Store Service
+
+Stores conversation metadata and message history. Required when running multiple Femtoclaw instances.
+
+**Quick start with the reference implementation:**
+
+```bash
+# Start the standalone conversation store
+PORT=9001 DB_PATH=./data/conversations.db API_TOKEN=store-secret \
+  npx tsx examples/conversation-store-server.ts
+```
+
+**Configure Femtoclaw to use it:**
+
+```bash
+CONVERSATION_STORE_TYPE=api
+CONVERSATION_STORE_URL=http://localhost:9001
+CONVERSATION_STORE_API_KEY=store-secret
+```
+
+**Endpoints provided** (see `docs/architecture.md` for full contract):
+
+| Method   | Path                              | Purpose                          |
+| -------- | --------------------------------- | -------------------------------- |
+| `POST`   | `/conversations`                  | Create conversation              |
+| `GET`    | `/conversations?userId=`          | List user's conversations        |
+| `GET`    | `/conversations/:id?userId=`      | Get conversation (with ownership)|
+| `PATCH`  | `/conversations/:id`              | Update status / metadata         |
+| `DELETE` | `/conversations/:id?userId=`      | Delete with cascade              |
+| `GET`    | `/conversations/:id/messages`     | Read message history             |
+| `POST`   | `/conversations/:id/messages`     | Append messages                  |
+| `PUT`    | `/conversations/:id/messages`     | Replace all messages (compaction)|
+
+**Operational notes:**
+- The store enforces user isolation: `GET` and `DELETE` require a matching `userId` query parameter.
+- `PUT /conversations/:id/messages` is used after compaction to atomically replace the message history.
+- For production, back this service with PostgreSQL or a managed database instead of SQLite.
+- The store does not need to run on the same host as Femtoclaw.
+
+### Memory Store Service
+
+Stores persistent user memories (preferences, feedback, project context, references). Required when running multiple Femtoclaw instances or when you want memory to survive service restarts without local disk.
+
+**Quick start with the reference implementation:**
+
+```bash
+# Start the standalone memory store
+PORT=9002 DB_PATH=./data/memory.db API_TOKEN=memory-secret \
+  npx tsx examples/memory-store-server.ts
+```
+
+**Configure Femtoclaw to use it:**
+
+```bash
+MEMORY_SERVICE_TYPE=api
+MEMORY_SERVICE_URL=http://localhost:9002
+MEMORY_SERVICE_API_KEY=memory-secret
+```
+
+**Endpoints provided** (see `docs/architecture.md` for full contract):
+
+| Method   | Path                                  | Purpose                    |
+| -------- | ------------------------------------- | -------------------------- |
+| `GET`    | `/memory/:userId?category=`           | List summaries (no values) |
+| `GET`    | `/memory/:userId/all`                 | Read all with full values  |
+| `GET`    | `/memory/:userId/:key`                | Read single entry          |
+| `GET`    | `/memory/:userId/search?q=&category=` | Keyword search             |
+| `PUT`    | `/memory/:userId/:key`                | Upsert memory entry        |
+| `DELETE` | `/memory/:userId/:key`                | Delete entry               |
+
+**Operational notes:**
+- All endpoints are scoped by `:userId` in the path — no cross-user access is possible.
+- `GET /memory/:userId` returns summaries without the `value` field. This is intentional: summaries are injected into the system prompt, and omitting values keeps token usage low.
+- The store should enforce a per-user entry limit (default: 200) and max value length (default: 2000 chars).
+
+### Memory via MCP
+
+As an alternative to the REST API backend, memory can be served via an MCP server:
+
+```bash
+MEMORY_SERVICE_TYPE=mcp
+MEMORY_MCP_SERVER=memory    # Must match a name in managed-mcp.json
+```
+
+The MCP server must expose five tools: `list_memories`, `read_memory`, `write_memory`, `delete_memory`, `search_memory`. See `docs/architecture.md` for the full parameter and response contract.
+
+### Backend Selection Reference
+
+| Scenario                     | Conversation Store | Memory Service | Notes                         |
+| ---------------------------- | ------------------ | -------------- | ----------------------------- |
+| Local development            | `sqlite` (default) | `sqlite`       | Zero external dependencies    |
+| Single instance, production  | `sqlite`           | `sqlite`       | Persistent if volume-mounted  |
+| Multi-instance, shared state | `api`              | `api` or `mcp` | Requires external services    |
+| Serverless (Lambda, FC)      | `api`              | `api` or `mcp` | No local disk between invokes |
+
+### Full Multi-Instance Example
+
+```bash
+# 1. Start conversation store
+PORT=9001 DB_PATH=/data/conversations.db API_TOKEN=secret1 \
+  npx tsx examples/conversation-store-server.ts &
+
+# 2. Start memory store
+PORT=9002 DB_PATH=/data/memory.db API_TOKEN=secret2 \
+  npx tsx examples/memory-store-server.ts &
+
+# 3. Start Femtoclaw instance(s)
+ANTHROPIC_API_KEY=sk-ant-xxx \
+API_TOKEN=femto-secret \
+CONVERSATION_STORE_TYPE=api \
+CONVERSATION_STORE_URL=http://localhost:9001 \
+CONVERSATION_STORE_API_KEY=secret1 \
+MEMORY_SERVICE_TYPE=api \
+MEMORY_SERVICE_URL=http://localhost:9002 \
+MEMORY_SERVICE_API_KEY=secret2 \
+  npm start
+```
+
+---
+
 ## MCP Server Configuration
 
 ### Managed Servers

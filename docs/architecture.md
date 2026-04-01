@@ -290,6 +290,154 @@ Both system blocks use `cache_control: { type: 'ephemeral' }` for Anthropic prom
 
 **Four memory types**: `user`, `feedback`, `project`, `reference`. Key naming convention: `type.topic` (e.g., `user.role`, `feedback.no_emoji`).
 
+---
+
+## External Service Contracts
+
+Femtoclaw is designed as a stateless service. In single-instance mode it uses a local SQLite file for both conversation and memory storage. In multi-instance mode these backends must be replaced with shared external services that implement the REST contracts described below.
+
+The codebase ships two reference implementations as runnable microservices under `examples/`.
+
+### Dependency Graph
+
+```
+                        Femtoclaw
+                           |
+          +----------------+----------------+
+          |                |                |
+  Conversation Store  Memory Service   Anthropic API
+  (sqlite | api)     (sqlite|api|mcp)  (required)
+          |                |
+          v                v
+     External REST    External REST     MCP Servers
+     or local SQLite  or local SQLite   (managed / per-request)
+                      or MCP server
+```
+
+### Conversation Store API Contract
+
+When `CONVERSATION_STORE_TYPE=api`, the `ApiConversationStore` delegates to an external REST service at `CONVERSATION_STORE_URL`. All requests carry `Authorization: Bearer <CONVERSATION_STORE_API_KEY>`.
+
+#### Data Model
+
+```typescript
+interface Conversation {
+  id: string;              // "conv-{uuid}"
+  userId: string;
+  status: 'idle' | 'running';
+  messageCount: number;
+  createdAt: string;       // ISO 8601
+  lastActivity: string;    // ISO 8601
+  metadata?: Record<string, unknown>;
+}
+
+interface ConversationMessage {
+  id: string;              // "msg-{uuid}"
+  conversationId: string;
+  role: 'user' | 'assistant';
+  sender?: string;
+  senderName?: string;
+  content: string;         // JSON-serialized ContentBlock[]
+  createdAt: string;       // ISO 8601
+}
+```
+
+#### Endpoints
+
+| Method   | Path                                | Request Body                          | Response              | Notes                      |
+| -------- | ----------------------------------- | ------------------------------------- | --------------------- | -------------------------- |
+| `POST`   | `/conversations`                    | `{ userId, conversationId? }`         | `Conversation`        | Create new conversation    |
+| `GET`    | `/conversations?userId=&limit=&offset=` | —                                 | `Conversation[]`      | List by user, desc by time |
+| `GET`    | `/conversations/:id?userId=`        | —                                     | `Conversation \| 404` | Enforces userId ownership  |
+| `PATCH`  | `/conversations/:id`                | `{ status?, metadata? }`             | `{ ok: true }`        | Update status / metadata   |
+| `DELETE` | `/conversations/:id?userId=`        | —                                     | `{ ok: true } \| 404` | Cascade-deletes messages   |
+| `GET`    | `/conversations/:id/messages?limit=&afterId=` | —                            | `ConversationMessage[]` | Ascending by createdAt   |
+| `POST`   | `/conversations/:id/messages`       | `{ messages: [...] }`                | `{ ids: [...] }`      | Batch append               |
+| `PUT`    | `/conversations/:id/messages`       | `{ messages: [...] }`                | `{ ok: true }`        | Full replace (compaction)  |
+
+**Key semantics**:
+- `GET /conversations/:id` must return 404 when the `userId` query parameter does not match the conversation owner. This enforces user isolation at the store level.
+- `PUT /conversations/:id/messages` atomically replaces all messages in a conversation. Used after compaction to swap the summarized history.
+- `POST /conversations/:id/messages` appends messages and increments the conversation's `messageCount` and `lastActivity`.
+
+**Reference implementation**: `examples/conversation-store-server.ts` — a standalone Express + SQLite microservice. Start with `npx tsx examples/conversation-store-server.ts`.
+
+### Memory Service API Contract
+
+When `MEMORY_SERVICE_TYPE=api`, the `ApiMemoryService` delegates to an external REST service at `MEMORY_SERVICE_URL`. All requests carry `Authorization: Bearer <MEMORY_SERVICE_API_KEY>`.
+
+#### Data Model
+
+```typescript
+type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
+
+interface MemoryEntry {
+  key: string;          // Naming convention: "type.topic" (e.g. "user.role")
+  type: MemoryType;
+  description: string;  // ~100 chars, used for relevance matching
+  value: string;        // Full content, max 2000 chars
+  tags?: string[];
+  updatedAt: string;    // ISO 8601
+  source: 'agent' | 'user';
+}
+
+// Summary view (returned by list/search, omits value to save tokens)
+type MemoryEntrySummary = Omit<MemoryEntry, 'value'>;
+```
+
+#### Endpoints
+
+| Method   | Path                                    | Request Body                                     | Response                | Notes                       |
+| -------- | --------------------------------------- | ------------------------------------------------ | ----------------------- | --------------------------- |
+| `GET`    | `/memory/:userId?category=`             | —                                                | `MemoryEntrySummary[]`  | List summaries (no value)   |
+| `GET`    | `/memory/:userId/all`                   | —                                                | `MemoryEntry[]`         | Read all with full values   |
+| `GET`    | `/memory/:userId/:key`                  | —                                                | `MemoryEntry`           | Read single entry           |
+| `GET`    | `/memory/:userId/search?q=&category=`   | —                                                | `MemoryEntrySummary[]`  | Keyword search              |
+| `PUT`    | `/memory/:userId/:key`                  | `{ value, type, description, tags?, source? }`   | `{ ok: true }`          | Upsert by (userId, key)     |
+| `DELETE` | `/memory/:userId/:key`                  | —                                                | `{ ok: true } \| 404`   | Delete single entry         |
+
+**Key semantics**:
+- All endpoints are scoped by `:userId` in the URL path. The store must not allow cross-user access.
+- `GET /memory/:userId` returns summaries (no `value` field) to keep prompt injection token-efficient. The agent uses `GET /memory/:userId/:key` to fetch full content on demand.
+- `PUT` is an upsert — creates if the key does not exist, updates if it does.
+- The store should enforce a per-user entry limit (suggested: 200) and value length cap (suggested: 2000 chars).
+
+**Reference implementation**: `examples/memory-store-server.ts` — a standalone Express + SQLite microservice. Start with `npx tsx examples/memory-store-server.ts`.
+
+### Memory Service MCP Contract
+
+When `MEMORY_SERVICE_TYPE=mcp`, the `McpMemoryService` delegates to the MCP server named by `MEMORY_MCP_SERVER` (default: `memory`). The MCP server must expose these tools:
+
+| MCP Tool           | Parameters                                        | Returns                          |
+| ------------------ | ------------------------------------------------- | -------------------------------- |
+| `list_memories`    | `{ user_id, category? }`                          | `MemoryEntrySummary[]` (JSON)    |
+| `read_memory`      | `{ user_id, key? }`                               | `MemoryEntry \| MemoryEntry[]`   |
+| `write_memory`     | `{ user_id, key, value, type, description, tags?, source? }` | `{ ok: true }`        |
+| `delete_memory`    | `{ user_id, key }`                                | `{ ok: true }`                   |
+| `search_memory`    | `{ user_id, query, category? }`                   | `MemoryEntrySummary[]` (JSON)    |
+
+The MCP server must be declared in `config/managed-mcp.json` under the name matching `MEMORY_MCP_SERVER`.
+
+### Backend Selection Summary
+
+```
+                   CONVERSATION_STORE_TYPE
+                   /                     \
+              "sqlite"                  "api"
+              (default)
+                 |                        |
+     SqliteConversationStore     ApiConversationStore
+     local file, single-writer   REST API, shared
+
+                   MEMORY_SERVICE_TYPE
+                /         |          \
+          "sqlite"      "api"       "mcp"
+          (default)
+             |            |            |
+   SqliteMemoryService  ApiMem...   McpMem...
+   local file           REST API    MCP tools
+```
+
 ### SQLite Compatibility (`src/utils/sqlite-compat.ts`)
 
 Abstracts the SQLite driver behind a unified `Database` interface:
