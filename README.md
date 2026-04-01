@@ -43,13 +43,24 @@ ANTHROPIC_API_KEY=sk-ant-xxx npm start
 ## Docker
 
 ```bash
-# Node.js (default)
-docker build --platform linux/amd64 -t femtoclaw .
-docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:latest
+# Build with Makefile (recommended)
+make docker-build                       # Node.js (default)
+make docker-build RUNTIME=bun           # Bun runtime
+make docker-build-bun                   # Shorthand for Bun
 
-# Bun runtime
+# Or directly
+docker build --platform linux/amd64 -t femtoclaw .
 docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
-docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:bun
+
+# Run
+docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:latest
+```
+
+Pre-built images are available from GHCR:
+
+```bash
+docker pull ghcr.io/breakcafe/femtoclaw:latest
+docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx ghcr.io/breakcafe/femtoclaw:latest
 ```
 
 ## Chat API
@@ -150,9 +161,22 @@ Important variables:
 
 Full configuration reference: `docs/configuration.md`
 
-## Verification
+## Makefile
 
-Latest local verification:
+```bash
+make help               # Show all available targets
+make test               # Run unit tests
+make docker-build       # Build Docker image
+make docker-run         # Run container interactively
+make ghcr-release       # Build and push to GHCR
+```
+
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`): Runs on pull requests — format check, typecheck, and tests.
+- **Docker Publish** (`.github/workflows/docker-publish.yml`): Pushes to `ghcr.io/breakcafe/femtoclaw` on merge to main. Manual dispatch supports `RUNTIME=bun`.
+
+## Verification
 
 ```bash
 npm run build
@@ -160,7 +184,7 @@ npm test
 npm run format:check
 ```
 
-At the time of the latest update these commands passed with 49 tests.
+49 tests across 11 test files.
 
 ## Notes
 

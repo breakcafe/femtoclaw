@@ -24,7 +24,31 @@ curl http://localhost:9000/health
 
 ## Docker Deployment
 
-### Runtime Selection
+### Pre-Built Images (GHCR)
+
+Pre-built images are published to GitHub Container Registry on every push to `main`:
+
+```bash
+# Pull and run the latest release
+docker pull ghcr.io/breakcafe/femtoclaw:latest
+docker run --rm -p 9000:9000 \
+  -e ANTHROPIC_API_KEY=sk-ant-xxx \
+  ghcr.io/breakcafe/femtoclaw:latest
+```
+
+Available tags:
+
+| Tag                   | Description                     |
+| --------------------- | ------------------------------- |
+| `latest`              | Latest main branch (Node.js)    |
+| `x.y.z`               | Specific version                |
+| `x.y.z-<commit>`      | Version pinned to commit        |
+| `latest-bun`          | Latest main branch (Bun)        |
+| `dev`, `dev-<commit>` | Non-main branch builds          |
+
+### Building Locally
+
+#### Runtime Selection
 
 The Dockerfile supports both Node.js and Bun via the `RUNTIME` build argument (default: `node`):
 
@@ -106,6 +130,33 @@ RUNTIME=bun ./femtoclaw.sh up
 ./femtoclaw.sh logs      # Tail logs
 ./femtoclaw.sh report    # Generate test report
 ```
+
+### Makefile
+
+All Docker and GHCR operations are available as Makefile targets:
+
+```bash
+make help                  # Show all targets
+make docker-build          # Build with Node.js (default)
+make docker-build-bun      # Build with Bun
+make docker-run            # Run interactively with .env
+make docker-run-bg         # Run in background
+make docker-stop           # Stop container
+make ghcr-login            # Authenticate to GHCR via gh CLI
+make ghcr-build            # Build with GHCR tags (branch-aware)
+make ghcr-push             # Push to GHCR
+make ghcr-release          # Build + push in one step
+make test                  # Run unit tests
+make test-health           # Smoke test /health
+make test-chat             # Smoke test /chat
+```
+
+Tag convention (managed by Makefile and CI):
+
+| Branch | Tags Applied                                        |
+| ------ | --------------------------------------------------- |
+| `main` | `latest`, `x.y.z`, `x.y.z-<commit>`                |
+| other  | `dev`, `dev-<commit>`, `dev-<branch-slug>`          |
 
 ### Health Check
 
