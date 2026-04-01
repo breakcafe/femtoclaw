@@ -1,13 +1,13 @@
-import Database from 'better-sqlite3';
+import { createDatabase, type Database } from '../utils/sqlite-compat.js';
 import { randomUUID } from 'crypto';
 import type { ConversationStore } from './store.js';
 import type { Conversation, ConversationMessage } from '../types.js';
 
 export class SqliteConversationStore implements ConversationStore {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(dbPath: string = './data/femtoclaw.db') {
-    this.db = new Database(dbPath);
+    this.db = createDatabase(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('busy_timeout = 5000');

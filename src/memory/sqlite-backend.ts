@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { createDatabase, type Database } from '../utils/sqlite-compat.js';
 import type {
   MemoryServiceInterface,
   MemoryEntry,
@@ -9,10 +9,10 @@ import type {
 import { config } from '../config.js';
 
 export class SqliteMemoryService implements MemoryServiceInterface {
-  private db: Database.Database;
+  private db: Database;
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
+    this.db = createDatabase(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.initSchema();
