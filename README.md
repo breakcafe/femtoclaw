@@ -43,10 +43,13 @@ ANTHROPIC_API_KEY=sk-ant-xxx npm start
 ## Docker
 
 ```bash
+# Node.js (default)
 docker build --platform linux/amd64 -t femtoclaw .
-docker run --rm -p 9000:9000 \
-  -e ANTHROPIC_API_KEY=sk-ant-xxx \
-  femtoclaw
+docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:latest
+
+# Bun runtime
+docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
+docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:bun
 ```
 
 ## Chat API

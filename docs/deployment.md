@@ -14,20 +14,35 @@ npm start     # Production mode (requires prior build)
 
 ## Docker Deployment
 
-### Build
+### Runtime Selection
+
+Dockerfile 通过 `RUNTIME` build arg 支持 Node.js 和 Bun 两种运行时（默认 Node.js）：
 
 ```bash
-docker build --platform linux/amd64 -t femtoclaw .
+# Node.js (default)
+docker build --platform linux/amd64 -t femtoclaw:node .
+
+# Bun
+docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
 ```
 
 With build metadata:
 
 ```bash
 docker build --platform linux/amd64 \
+  --build-arg RUNTIME=node \
   --build-arg BUILD_VERSION=$(node -p "require('./package.json').version") \
   --build-arg BUILD_COMMIT=$(git rev-parse --short HEAD) \
   --build-arg BUILD_TIME=$(date -u +%FT%TZ) \
-  -t femtoclaw .
+  -t femtoclaw:node .
+```
+
+容器内可通过 `FEMTOCLAW_RUNTIME` 环境变量查看当前运行时。
+
+使用 `femtoclaw.sh` 时通过 `RUNTIME` 环境变量切换：
+
+```bash
+RUNTIME=bun ./femtoclaw.sh up
 ```
 
 ### Run

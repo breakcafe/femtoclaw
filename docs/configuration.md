@@ -93,6 +93,21 @@ Notes:
 | `REQUIRE_USER_ID`  | `false`  | When `true`, reject requests without `X-User-Id` header  |
 | `ALLOWED_TOOLS`    | `*`      | Comma-separated built-in tool allowlist                  |
 
+### Docker Build Args
+
+| Arg             | Default   | Purpose                                      |
+| --------------- | --------- | -------------------------------------------- |
+| `RUNTIME`       | `node`    | JavaScript runtime: `node` or `bun`          |
+| `BUILD_VERSION` | `0.1.0`   | Version embedded in image labels and /health |
+| `BUILD_COMMIT`  | `unknown` | Git commit embedded in image labels          |
+| `BUILD_TIME`    | `unknown` | Build timestamp embedded in image labels     |
+
+### Runtime-Injected Environment (Docker only)
+
+| Variable             | Purpose                                                |
+| -------------------- | ------------------------------------------------------ |
+| `FEMTOCLAW_RUNTIME`  | Set by Dockerfile to `node` or `bun`; read-only marker |
+
 ## Files And Directories
 
 ### Public Config Files

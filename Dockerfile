@@ -1,13 +1,20 @@
-# ─── Stage 1: Build TypeScript + native modules ───
-FROM node:22-slim AS builder
+# ─────────────────────────────────────────────────────────
+# Femtoclaw Dockerfile — unified Node.js / Bun build
+#
+# Build arg RUNTIME selects the JavaScript runtime:
+#   docker build --build-arg RUNTIME=node ...   (default)
+#   docker build --build-arg RUNTIME=bun  ...
+# ─────────────────────────────────────────────────────────
 
-# Install build tools for native modules (better-sqlite3)
+ARG RUNTIME=node
+
+# ══════════════════════════════════════════════════════════
+# Node.js stages
+# ══════════════════════════════════════════════════════════
+
+FROM node:22-slim AS builder-node
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
+    python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -15,25 +22,53 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
-# ─── Stage 2: Production dependencies with native modules ───
-FROM node:22-slim AS deps
-
+FROM node:22-slim AS deps-node
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
+    python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
-# Install with dev dependencies so prepare hooks can resolve local binaries,
-# then prune down to the production dependency set used by the runtime image.
 RUN npm ci && npm prune --omit=dev
 
-# ─── Stage 3: Runtime (minimal) ───
-FROM node:22-slim AS runtime
+FROM node:22-slim AS runtime-node
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl tini && rm -rf /var/lib/apt/lists/*
 
-# Build metadata
+# ══════════════════════════════════════════════════════════
+# Bun stages
+# ══════════════════════════════════════════════════════════
+
+FROM oven/bun:1.3-slim AS builder-bun
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN bun run build
+
+FROM oven/bun:1.3-slim AS deps-bun
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production --ignore-scripts && \
+    cd node_modules/better-sqlite3 && bunx node-gyp rebuild
+
+FROM oven/bun:1.3-slim AS runtime-bun
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl && rm -rf /var/lib/apt/lists/*
+
+# ══════════════════════════════════════════════════════════
+# Select stages via RUNTIME arg
+# ══════════════════════════════════════════════════════════
+
+FROM builder-${RUNTIME} AS builder
+FROM deps-${RUNTIME}    AS deps
+FROM runtime-${RUNTIME}  AS final
+
+# ── Build metadata ──
+ARG RUNTIME
 ARG BUILD_VERSION=0.1.0
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME=unknown
@@ -44,13 +79,8 @@ LABEL org.opencontainers.image.title="femtoclaw" \
       org.opencontainers.image.revision="${BUILD_COMMIT}" \
       org.opencontainers.image.created="${BUILD_TIME}"
 
-# Install runtime dependencies only (curl for health check, tini for signal handling)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    tini \
-    && rm -rf /var/lib/apt/lists/*
-
 ENV NODE_ENV=production \
+    FEMTOCLAW_RUNTIME=${RUNTIME} \
     APP_VERSION=${BUILD_VERSION} \
     BUILD_COMMIT=${BUILD_COMMIT} \
     BUILD_TIME=${BUILD_TIME} \
@@ -60,27 +90,32 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Copy production node_modules (with native bindings) from deps stage
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps    /app/node_modules ./node_modules
 COPY package.json ./
-
-# Copy compiled JS from builder stage
-COPY --from=builder /app/dist/ ./dist/
+COPY --from=builder /app/dist/        ./dist/
 COPY skills/ ./skills/
 COPY config/ ./config/
 
-# Create data directory with proper permissions
-RUN mkdir -p /data && chown -R node:node /data /app
+# Create data directory — use appropriate non-root user
+RUN mkdir -p /data && \
+    if id bun >/dev/null 2>&1; then \
+      chown -R bun:bun /data /app; \
+    else \
+      chown -R node:node /data /app; \
+    fi
 
 EXPOSE 9000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:9000/health || exit 1
 
 # Run as non-root
-USER node
+USER ${RUNTIME:-node}
 
-# Use tini for proper PID 1 signal handling
-ENTRYPOINT ["tini", "--"]
-CMD ["node", "dist/index.js"]
+# Node uses tini for PID 1 signal handling; Bun handles signals natively
+ENTRYPOINT []
+CMD if [ "$FEMTOCLAW_RUNTIME" = "bun" ]; then \
+      exec bun run dist/index.js; \
+    else \
+      exec tini -- node dist/index.js; \
+    fi

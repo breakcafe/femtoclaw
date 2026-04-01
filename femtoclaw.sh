@@ -9,6 +9,10 @@
 #   ./femtoclaw.sh stop      Stop and remove container
 #   ./femtoclaw.sh logs      Tail container logs
 #   ./femtoclaw.sh report    Run tests and generate report
+#
+# Runtime selection (default: node):
+#   RUNTIME=bun ./femtoclaw.sh up
+#   RUNTIME=node ./femtoclaw.sh up
 # ─────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -16,8 +20,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # ─── Config ───
+RUNTIME="${RUNTIME:-node}"
 CONTAINER_NAME="femtoclaw"
-IMAGE_NAME="femtoclaw:latest"
+IMAGE_NAME="femtoclaw:${RUNTIME}"
 PORT="${PORT:-9000}"
 BASE_URL="http://localhost:${PORT}"
 API_TOKEN="${API_TOKEN:-femtoclaw-$(openssl rand -hex 8)}"
@@ -93,8 +98,9 @@ build_image() {
   commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
   time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-  log "Building ${IMAGE_NAME} (commit: ${commit})..."
+  log "Building ${IMAGE_NAME} (runtime: ${RUNTIME}, commit: ${commit})..."
   docker build --platform linux/amd64 \
+    --build-arg RUNTIME="${RUNTIME}" \
     --build-arg BUILD_VERSION=0.1.0 \
     --build-arg BUILD_COMMIT="${commit}" \
     --build-arg BUILD_TIME="${time}" \
@@ -669,7 +675,7 @@ REPORT_EOF
 | Property | Value |
 |----------|-------|
 | Image Size | ${image_size} |
-| Base Image | node:22-slim |
+| Runtime | ${RUNTIME} |
 | Health Check | curl -sf http://localhost:9000/health |
 | Signal Handling | tini (PID 1) |
 | User | node (non-root) |
