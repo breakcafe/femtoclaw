@@ -8,25 +8,45 @@ npm install
 cp .env.example .env
 # Edit .env with your ANTHROPIC_API_KEY
 
-npm run dev   # Development with auto-reload
-npm start     # Production mode (requires prior build)
+npm run dev     # Development mode with auto-reload
+npm run build   # Compile TypeScript
+npm start       # Production mode
 ```
+
+Verify:
+
+```bash
+curl http://localhost:9000/health
+# Expected: {"status":"ok","version":"0.1.0",...}
+```
+
+---
 
 ## Docker Deployment
 
 ### Runtime Selection
 
-Dockerfile 通过 `RUNTIME` build arg 支持 Node.js 和 Bun 两种运行时（默认 Node.js）：
+The Dockerfile supports both Node.js and Bun via the `RUNTIME` build argument (default: `node`):
 
 ```bash
-# Node.js (default)
+# Node.js (default, recommended for production)
 docker build --platform linux/amd64 -t femtoclaw:node .
 
 # Bun
 docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
 ```
 
-With build metadata:
+The `FEMTOCLAW_RUNTIME` environment variable is set inside the container to indicate the active runtime.
+
+| Property      | Node.js       | Bun            |
+| ------------- | ------------- | -------------- |
+| Startup speed | Faster (~7x)  | Slower         |
+| HTTP latency  | ~2ms          | ~0.5ms         |
+| Memory usage  | ~93MB         | ~113MB         |
+| Compatibility | Native        | Needs compat layer |
+| Recommendation| Production    | Experimental   |
+
+### Build with Metadata
 
 ```bash
 docker build --platform linux/amd64 \
@@ -37,21 +57,22 @@ docker build --platform linux/amd64 \
   -t femtoclaw:node .
 ```
 
-容器内可通过 `FEMTOCLAW_RUNTIME` 环境变量查看当前运行时。
-
-使用 `femtoclaw.sh` 时通过 `RUNTIME` 环境变量切换：
-
-```bash
-RUNTIME=bun ./femtoclaw.sh up
-```
+| Build Arg       | Default   | Description             |
+| --------------- | --------- | ----------------------- |
+| `RUNTIME`       | `node`    | Runtime: `node` or `bun`|
+| `BUILD_VERSION` | `0.1.0`   | Version label           |
+| `BUILD_COMMIT`  | `unknown` | Git commit hash         |
+| `BUILD_TIME`    | `unknown` | Build timestamp         |
 
 ### Run
+
+Basic:
 
 ```bash
 docker run --rm -p 9000:9000 \
   -e ANTHROPIC_API_KEY=sk-ant-xxx \
   -e API_TOKEN=your-secret-token \
-  femtoclaw
+  femtoclaw:node
 ```
 
 With persistent data:
@@ -62,35 +83,48 @@ docker run -d --name femtoclaw \
   -e ANTHROPIC_API_KEY=sk-ant-xxx \
   -e API_TOKEN=your-secret-token \
   -v femtoclaw-data:/data \
-  femtoclaw
+  femtoclaw:node
+```
+
+### One-Click Script
+
+Use `femtoclaw.sh` for automated build, start, and test:
+
+```bash
+# Node.js (default)
+./femtoclaw.sh up
+
+# Bun
+RUNTIME=bun ./femtoclaw.sh up
+
+# Full cycle: build -> start -> test -> stop
+./femtoclaw.sh
+
+# Other commands
+./femtoclaw.sh test      # Run tests against a running instance
+./femtoclaw.sh stop      # Stop container
+./femtoclaw.sh logs      # Tail logs
+./femtoclaw.sh report    # Generate test report
 ```
 
 ### Health Check
 
-The container includes a built-in health check:
+Built-in health check (every 30 seconds):
 
 ```bash
-curl http://localhost:9000/health
+curl -sf http://localhost:9000/health
 ```
 
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "version": "0.1.0",
-  "model": "claude-sonnet-4-20250514"
-}
-```
+---
 
 ## Architecture Modes
 
 ### Single Instance (Default)
 
 ```
-Client → Femtoclaw (Node.js) → Anthropic API
-                │
-         ┌──────┼──────┐
+Client --> Femtoclaw (Node.js) --> Anthropic API
+                |
+         +------+------+
          SQLite  MCP    Skills
          (local) Servers (local)
 ```
@@ -101,26 +135,28 @@ All state is local: SQLite for conversations + memory, skill files on disk, in-m
 
 ```
               Load Balancer
-              (session affinity)
-                   │
-         ┌─────────┼─────────┐
-    Femtoclaw #1  Femtoclaw #2  Femtoclaw #3
-         │              │              │
-         └──────────────┼──────────────┘
-                        │
-              Shared Storage
-              (API backends)
+           (session affinity)
+                  |
+        +---------+---------+
+   Femtoclaw #1  #2         #3
+   (stateless)  (stateless) (stateless)
+        |         |          |
+        +---------+----------+
+                  |
+        +---------+---------+
+    Shared Store  Anthropic  MCP
+    (API backend) API        Servers
 ```
 
-Requirements for multi-instance:
+Requirements for multi-instance deployment:
 
-| Component | Single Instance | Multi Instance |
-|---|---|---|
-| Conversation Store | `sqlite` (default) | `api` (shared REST backend) |
-| Memory Service | `sqlite` (default) | `api` or `mcp` (shared backend) |
-| Conversation Lock | In-memory (default) | Session affinity at LB, or Redis (future) |
-| Rate Limiting | In-memory (default) | API Gateway rate limiting |
-| Skills | Local directories | Shared mount or registry |
+| Component          | Single Instance  | Multi Instance                          |
+| ------------------ | ---------------- | --------------------------------------- |
+| Conversation Store | `sqlite`         | `api` (shared REST backend)             |
+| Memory Service     | `sqlite`         | `api` or `mcp` (shared backend)         |
+| Conversation Lock  | In-memory        | Session affinity at LB, or Redis (future)|
+| Rate Limiting      | In-memory        | API Gateway rate limiting               |
+| Skills             | Local directories| Shared mount or registry                |
 
 Configure with:
 
@@ -136,71 +172,101 @@ MEMORY_SERVICE_API_KEY=xxx
 
 ### Session Affinity
 
-Since per-conversation locks are in-memory, the load balancer must route requests for the same `conversation_id` to the same instance. Options:
+Per-conversation locks are in-memory, so the load balancer must route requests for the same `conversation_id` to the same instance:
 
 - Nginx: `ip_hash` or cookie-based sticky sessions
 - AWS ALB: Target group stickiness
-- Kubernetes: Session affinity on service
+- Kubernetes: Session affinity on Service
+
+---
 
 ## MCP Server Configuration
 
 ### Managed Servers
 
-Configure pre-connected MCP servers in `config/managed-mcp.json`:
+Pre-configured MCP servers in `config/managed-mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "finance-api": {
       "type": "http",
-      "url": "https://api.example.com/mcp"
+      "url": "https://mcp.example.com/api"
     },
     "local-tools": {
       "type": "stdio",
       "command": "npx",
       "args": ["@modelcontextprotocol/server-everything"]
+    },
+    "legacy-service": {
+      "type": "sse",
+      "url": "https://sse.example.com/mcp"
     }
   }
 }
 ```
+
+| Transport | Description                           |
+| --------- | ------------------------------------- |
+| `http`    | Streamable HTTP (auto-fallback to SSE)|
+| `sse`     | Server-Sent Events transport          |
+| `stdio`   | Subprocess via stdin/stdout           |
 
 ### Per-Request Servers
 
-Clients can attach temporary MCP servers via `POST /chat`:
+Clients attach temporary MCP servers via `POST /chat`. See `docs/api.md` for details.
 
-```json
-{
-  "message": "Query my data",
-  "mcp_servers": {
-    "user-api": {
-      "type": "http",
-      "url": "https://user-service.example.com/mcp"
-    }
-  },
-  "mcp_context": {
-    "user-api": {
-      "headers": {
-        "Authorization": "Bearer user-token-xxx"
-      }
-    }
-  }
-}
-```
+---
 
 ## Environment Variables
 
-See `docs/configuration.md` for the complete reference.
+### Required
 
-Key deployment variables:
+| Variable            | Description               |
+| ------------------- | ------------------------- |
+| `ANTHROPIC_API_KEY` | Anthropic-compatible key  |
 
-| Variable | Required | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
-| `API_TOKEN` | Recommended | Bearer auth token |
-| `PORT` | No (9000) | HTTP port |
-| `ANTHROPIC_BASE_URL` | No | API proxy URL |
-| `DEFAULT_MODEL` | No | Model override |
-| `SQLITE_DB_PATH` | No | Database path |
+### Key Deployment Variables
+
+| Variable                 | Default                     | Description                |
+| ------------------------ | --------------------------- | -------------------------- |
+| `PORT`                   | `9000`                      | HTTP port                  |
+| `API_TOKEN`              | empty (no auth)             | Bearer authentication      |
+| `DEFAULT_MODEL`          | `claude-sonnet-4-20250514`  | Default model              |
+| `ANTHROPIC_BASE_URL`     | `https://api.anthropic.com` | API proxy URL              |
+| `ASSISTANT_NAME`         | `Femtoclaw`                 | Assistant display name     |
+| `LOG_LEVEL`              | `info`                      | Log level                  |
+| `REQUIRE_USER_ID`        | `false`                     | Enforce X-User-Id header   |
+| `SQLITE_DB_PATH`         | `./data/femtoclaw.db`       | Database path              |
+
+See `docs/configuration.md` for the full reference.
+
+---
+
+## Security
+
+### Production Requirements
+
+```bash
+API_TOKEN=<strong-random-string>      # Must be set
+REQUIRE_USER_ID=true                   # Enforce user identity
+```
+
+### Secrets Management
+
+- Inject `ANTHROPIC_API_KEY` and `API_TOKEN` via environment variables or cloud secret managers.
+- Never commit `.env` to version control.
+- Rotate `API_TOKEN` periodically.
+
+### Network
+
+- Place Femtoclaw behind a reverse proxy (Nginx, ALB) with TLS termination.
+- Restrict direct access to the container port.
+- Use HTTPS for external MCP servers.
+
+See `docs/security.md` for the full security model.
+
+---
 
 ## Monitoring
 
@@ -209,34 +275,40 @@ Key deployment variables:
 Structured JSON logs via pino. Control verbosity with `LOG_LEVEL`:
 
 ```bash
-LOG_LEVEL=debug  # debug, info, warn, error
+LOG_LEVEL=debug   # Development
+LOG_LEVEL=info    # Production (default)
+LOG_LEVEL=warn    # Warnings and errors only
 ```
 
-### Metrics to Watch
+### Key Metrics
 
-- Response times (SSE first-byte latency)
-- Token usage per request (from `message_complete` events)
-- Rate limit hits (429 responses)
-- MCP connection failures
-- Compaction frequency
+| Metric              | Source                   | Description           |
+| ------------------- | ------------------------ | --------------------- |
+| Response latency    | Application logs         | Per-request duration  |
+| Token usage         | `message_complete` event | Input/output tokens   |
+| 429 rate            | HTTP status codes        | Rate limit hit rate   |
+| MCP failures        | Application logs         | MCP availability      |
+| Compaction triggers  | Application logs         | Long conversation rate|
 
 ### Graceful Shutdown
 
-The server handles `SIGTERM` and `SIGINT` for graceful shutdown:
+The server handles `SIGTERM` and `SIGINT`:
 
 1. Stops accepting new connections
 2. Waits for in-flight requests to complete
 3. Closes MCP connections
 4. Closes database connections
 
-## Troubleshooting
+---
 
-### Common Issues
+## Troubleshooting
 
 **"ANTHROPIC_API_KEY is required"**: Set the environment variable before starting.
 
-**MCP connection failures**: Check that managed MCP server URLs are accessible from the container. For `stdio` servers, ensure the command is available in PATH.
+**MCP connection failures**: Check that managed MCP server URLs are accessible from the container. For `stdio` servers, ensure the command is in PATH.
 
 **SQLite lock errors**: Ensure only one instance writes to the same SQLite file. Use `CONVERSATION_STORE_TYPE=api` for multi-instance deployments.
 
 **Skill loading warnings**: Check that skill directories exist and contain valid `SKILL.md` files with YAML frontmatter.
+
+**User data isolation**: Set `REQUIRE_USER_ID=true` in production to ensure every request carries an `X-User-Id` header.
