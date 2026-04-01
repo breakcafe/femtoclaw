@@ -10,6 +10,8 @@ This directory contains code-adjacent documentation that is safe to publish and 
 - `skills-guide.md`: creating and using skills, three-tier system
 - `security.md`: trust model, attack surface, deployment hardening
 - `deployment.md`: Docker, horizontal scaling, MCP configuration
+- `api-guide-zh.md`: API 调用指南（中文）
+- `deployment-guide-zh.md`: 部署指南（中文）
 
 ## Scope
 
