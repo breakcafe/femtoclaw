@@ -53,6 +53,15 @@ export interface Config {
 
   // Feature toggles
   ENABLE_MCP: boolean;
+  TRACE_ENABLED: boolean;
+  TRACE_ENDPOINT: string;
+  TRACE_API_KEY: string;
+  TRACE_BATCH_SIZE: number;
+  TRACE_FLUSH_INTERVAL_MS: number;
+  TRACE_QUEUE_MAX: number;
+  TRACE_TIMEOUT_MS: number;
+  TRACE_INCLUDE_THINKING: 'off' | 'summary' | 'full';
+  TRACE_THINKING_MAX_CHARS: number;
 
   /**
    * When true, requests without X-User-Id header are rejected with 400.
@@ -133,6 +142,18 @@ export const config: Config = {
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
 
   ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
+  TRACE_ENABLED: env('TRACE_ENABLED', 'false') === 'true',
+  TRACE_ENDPOINT: env('TRACE_ENDPOINT'),
+  TRACE_API_KEY: env('TRACE_API_KEY'),
+  TRACE_BATCH_SIZE: envInt('TRACE_BATCH_SIZE', 50),
+  TRACE_FLUSH_INTERVAL_MS: envInt('TRACE_FLUSH_INTERVAL_MS', 500),
+  TRACE_QUEUE_MAX: envInt('TRACE_QUEUE_MAX', 5000),
+  TRACE_TIMEOUT_MS: envInt('TRACE_TIMEOUT_MS', 1500),
+  TRACE_INCLUDE_THINKING: env(
+    'TRACE_INCLUDE_THINKING',
+    'summary',
+  ) as Config['TRACE_INCLUDE_THINKING'],
+  TRACE_THINKING_MAX_CHARS: envInt('TRACE_THINKING_MAX_CHARS', 2000),
   REQUIRE_USER_ID: env('REQUIRE_USER_ID', 'false') === 'true',
   ALLOWED_TOOLS: env('ALLOWED_TOOLS', '*'),
 };

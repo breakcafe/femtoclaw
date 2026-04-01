@@ -7,6 +7,7 @@ import { ConversationLock } from './conversation/lock.js';
 import { SkillManager } from './skills/manager.js';
 import { createMemoryService } from './memory/service-factory.js';
 import { McpClientPool } from './mcp/client-pool.js';
+import { createTraceSink } from './trace/sink.js';
 
 async function main(): Promise<void> {
   logger.info('Starting Femtoclaw...');
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   const mcpClientPool = new McpClientPool();
   await mcpClientPool.init();
   const memoryService = createMemoryService(mcpClientPool);
+  const traceSink = createTraceSink();
 
   // Build deps
   const deps: ServerDeps = {
@@ -39,6 +41,7 @@ async function main(): Promise<void> {
     skillManager,
     memoryService,
     mcpClientPool,
+    traceSink,
   };
 
   // Create and start server
@@ -62,6 +65,7 @@ async function main(): Promise<void> {
     server.close();
     conversationStore.close?.();
     await mcpClientPool.shutdown();
+    await traceSink.close();
     process.exit(0);
   };
 

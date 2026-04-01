@@ -8,6 +8,7 @@ import { executeTool, type ToolUseBlock, type ToolResultBlock } from '../tools/e
 import { getAllToolDefinitions } from '../tools/index.js';
 import type { AnthropicToolDefinition } from '../mcp/tool-mapper.js';
 import type { McpClientPool } from '../mcp/client-pool.js';
+import type { TraceSink } from '../trace/sink.js';
 import type {
   AskUserQuestionItem,
   StreamEvent,
@@ -68,6 +69,8 @@ export interface AgentRunInput {
   resumeInputResponse?: InputResponse;
   /** When true, AskUserQuestion returns awaiting_input instead of blocking the HTTP request. */
   pauseOnInput?: boolean;
+  traceId?: string;
+  requestId?: string;
 }
 
 export interface AgentRunResult {
@@ -132,6 +135,7 @@ export class AgentEngine {
     private skillManager: SkillManagerInterface,
     private memoryService: MemoryServiceInterface,
     private mcpClientPool: McpClientPool,
+    private traceSink: TraceSink,
   ) {
     this.anthropic = new Anthropic({
       apiKey: config.ANTHROPIC_API_KEY,
@@ -175,6 +179,17 @@ export class AgentEngine {
       { timezone: input.timezone, device_type: input.device_type, locale: input.locale },
       activeToolNames,
     );
+
+    this.emitTrace(input, 'context_built', {
+      model,
+      system_blocks: systemBlocks,
+      preamble_blocks: preambleBlocks,
+      existing_message_count: input.existingMessages?.length ?? 0,
+      existing_messages_preview: (input.existingMessages ?? []).slice(-20),
+      current_prompt_preview: input.prompt.slice(0, 2000),
+      available_tools: tools.map((t) => t.name),
+      mcp_warnings: mcpWarnings,
+    });
 
     // 4. Construct messages in Anthropic API format
     const messages: ApiMessage[] = [];
@@ -227,6 +242,15 @@ export class AgentEngine {
       }
 
       // Create API request
+      const loopStartMs = Date.now();
+      let loopInputTokens = 0;
+      let loopOutputTokens = 0;
+      this.emitTrace(input, 'model_call_start', {
+        loop: loopCount,
+        model,
+        message_count: messages.length,
+        tool_count: tools.length,
+      });
       const apiParams: Anthropic.MessageCreateParams = {
         model,
         max_tokens: config.MAX_OUTPUT_TOKENS,
@@ -264,6 +288,7 @@ export class AgentEngine {
       // Collect assistant content blocks
       const assistantBlocks: ContentBlock[] = [];
       let currentText = '';
+      let thinkingText = '';
       const toolUseBlocks: ToolUseBlock[] = [];
       let currentToolUse: { id: string; name: string; inputJson: string } | null = null;
 
@@ -295,6 +320,7 @@ export class AgentEngine {
               currentText += delta.text;
               onEvent({ type: 'text_delta', data: { text: delta.text } });
             } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+              thinkingText += String(delta.thinking);
               onEvent({ type: 'thinking_delta', data: { thinking: delta.thinking } });
             } else if (delta?.type === 'input_json_delta' && currentToolUse) {
               currentToolUse.inputJson += delta.partial_json ?? '';
@@ -340,7 +366,9 @@ export class AgentEngine {
             }
             const usage = (event as any).usage;
             if (usage) {
-              totalUsage.output_tokens += usage.output_tokens ?? 0;
+              const outTokens = usage.output_tokens ?? 0;
+              totalUsage.output_tokens += outTokens;
+              loopOutputTokens += outTokens;
             }
             break;
           }
@@ -348,7 +376,9 @@ export class AgentEngine {
           case 'message_start': {
             const msgUsage = (event as any).message?.usage;
             if (msgUsage) {
-              totalUsage.input_tokens += msgUsage.input_tokens ?? 0;
+              const inTokens = msgUsage.input_tokens ?? 0;
+              totalUsage.input_tokens += inTokens;
+              loopInputTokens += inTokens;
               totalUsage.cache_read_tokens =
                 (totalUsage.cache_read_tokens ?? 0) + (msgUsage.cache_read_input_tokens ?? 0);
               totalUsage.cache_creation_tokens =
@@ -359,6 +389,18 @@ export class AgentEngine {
           }
         }
       }
+
+      this.emitTrace(input, 'model_call_end', {
+        loop: loopCount,
+        model,
+        latency_ms: Date.now() - loopStartMs,
+        stop_reason: stopReason,
+        input_tokens: loopInputTokens,
+        output_tokens: loopOutputTokens,
+        output_text_length: finalText.length,
+        tool_use_count: toolUseBlocks.length,
+        thinking: this.formatThinkingForTrace(thinkingText),
+      });
 
       // Flush trailing text
       if (currentText) {
@@ -389,6 +431,12 @@ export class AgentEngine {
         const toolResultBlocks: ToolResultContentBlock[] = [];
 
         for (const block of toolUseBlocks) {
+          this.emitTrace(input, 'tool_call_start', {
+            loop: loopCount,
+            tool_use_id: block.id,
+            tool_name: block.name,
+            input: block.input,
+          });
           if (block.name === 'AskUserQuestion') {
             const questions = normalizeQuestions(block.input.questions);
             onEvent({
@@ -408,6 +456,13 @@ export class AgentEngine {
             });
 
             if (input.pauseOnInput) {
+              this.emitTrace(input, 'tool_call_end', {
+                loop: loopCount,
+                tool_use_id: block.id,
+                tool_name: block.name,
+                status: 'awaiting_input',
+                question_count: questions.length,
+              });
               await this.mcpClientPool.cleanupTransient();
               return {
                 content: finalText,
@@ -426,6 +481,13 @@ export class AgentEngine {
 
             const userResponse = await waitForUserInput(block.id);
             toolResultBlocks.push(buildUserInputToolResult(userResponse));
+            this.emitTrace(input, 'tool_call_end', {
+              loop: loopCount,
+              tool_use_id: block.id,
+              tool_name: block.name,
+              status: 'ok',
+              resumed: true,
+            });
           } else {
             const result = await executeTool(block, toolContext, this.mcpClientPool);
             toolResultBlocks.push({
@@ -441,6 +503,14 @@ export class AgentEngine {
                 data: { tool: block.name, content: result.content },
               });
             }
+            this.emitTrace(input, 'tool_call_end', {
+              loop: loopCount,
+              tool_use_id: block.id,
+              tool_name: block.name,
+              status: result.is_error ? 'error' : 'ok',
+              is_error: result.is_error,
+              result_preview: String(result.content).slice(0, 1000),
+            });
           }
         }
 
@@ -490,6 +560,38 @@ export class AgentEngine {
       model,
       newMessages,
     };
+  }
+
+  private emitTrace(input: AgentRunInput, eventType: string, payload: Record<string, unknown>): void {
+    if (!input.traceId) {
+      return;
+    }
+    this.traceSink.emit({
+      trace_id: input.traceId,
+      request_id: input.requestId,
+      conversation_id: input.conversationId,
+      user_id: input.userId,
+      message_id: input.messageId,
+      event_type: eventType,
+      payload,
+    });
+  }
+
+  private formatThinkingForTrace(thinkingText: string): string | undefined {
+    const normalized = thinkingText.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    if (config.TRACE_INCLUDE_THINKING === 'off') {
+      return undefined;
+    }
+    if (config.TRACE_INCLUDE_THINKING === 'full') {
+      return normalized.slice(0, config.TRACE_THINKING_MAX_CHARS);
+    }
+    if (normalized.length <= config.TRACE_THINKING_MAX_CHARS) {
+      return normalized;
+    }
+    return `${normalized.slice(0, config.TRACE_THINKING_MAX_CHARS)}...`;
   }
 
   private async buildToolList(
