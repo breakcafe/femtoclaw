@@ -55,9 +55,11 @@ describe('Server', () => {
     expect(res.body.status).toBe('ok');
   });
 
-  it('GET /health should include version and model', async () => {
+  it('GET /health should include engine, version, runtime, and model', async () => {
     const res = await request(app).get('/health');
+    expect(res.body.engine).toBe('femtoclaw');
     expect(res.body.version).toBeDefined();
+    expect(res.body.runtime).toMatch(/^(node|bun)$/);
     expect(res.body.model).toBeDefined();
   });
 

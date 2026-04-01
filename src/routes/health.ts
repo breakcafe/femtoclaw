@@ -11,7 +11,9 @@ export function healthRoutes(): Router {
   router.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
+      engine: 'femtoclaw',
       version: APP_VERSION,
+      runtime: process.env.FEMTOCLAW_RUNTIME || ('Bun' in globalThis ? 'bun' : 'node'),
       commit: BUILD_COMMIT,
       build_time: BUILD_TIME,
       assistant_name: config.ASSISTANT_NAME,
