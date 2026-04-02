@@ -11,9 +11,9 @@ import { createTraceSink } from './trace/sink.js';
 
 async function main(): Promise<void> {
   logger.info('Starting Femtoclaw...');
-  if (!config.ANTHROPIC_API_KEY) {
+  if (!config.ANTHROPIC_API_KEY && !config.ANTHROPIC_AUTH_TOKEN) {
     logger.warn(
-      'ANTHROPIC_API_KEY is empty. Set ANTHROPIC_API_KEY (or X_API_KEY/API_KEY) to avoid auth failures.',
+      'Anthropic credentials are empty. Set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY (or X_API_KEY/API_KEY) to avoid auth failures.',
     );
   }
 

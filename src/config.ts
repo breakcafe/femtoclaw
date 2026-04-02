@@ -7,6 +7,7 @@ export interface Config {
 
   // Anthropic
   ANTHROPIC_API_KEY: string;
+  ANTHROPIC_AUTH_TOKEN: string;
   ANTHROPIC_BASE_URL: string;
   DEFAULT_MODEL: string;
   FALLBACK_MODEL: string;
@@ -102,8 +103,9 @@ export const config: Config = {
   DEFAULT_TIMEZONE: env('DEFAULT_TIMEZONE', 'UTC'),
 
   ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY', env('X_API_KEY', env('API_KEY'))),
-  ANTHROPIC_BASE_URL: env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
-  DEFAULT_MODEL: env('DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
+  ANTHROPIC_AUTH_TOKEN: env('ANTHROPIC_AUTH_TOKEN'),
+  ANTHROPIC_BASE_URL: env('ANTHROPIC_BASE_URL', 'https://api.minimaxi.com/anthropic'),
+  DEFAULT_MODEL: env('DEFAULT_MODEL', 'MiniMax-M2.7'),
   FALLBACK_MODEL: env('FALLBACK_MODEL'),
   MAX_OUTPUT_TOKENS: envInt('MAX_OUTPUT_TOKENS', 16384),
   MAX_EXECUTION_MS: envInt('MAX_EXECUTION_MS', 300000),

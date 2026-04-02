@@ -137,8 +137,12 @@ export class AgentEngine {
     private mcpClientPool: McpClientPool,
     private traceSink: TraceSink,
   ) {
+    const authOptions =
+      config.ANTHROPIC_AUTH_TOKEN.trim() !== ''
+        ? { authToken: config.ANTHROPIC_AUTH_TOKEN }
+        : { apiKey: config.ANTHROPIC_API_KEY };
     this.anthropic = new Anthropic({
-      apiKey: config.ANTHROPIC_API_KEY,
+      ...authOptions,
       baseURL: config.ANTHROPIC_BASE_URL,
     });
   }
