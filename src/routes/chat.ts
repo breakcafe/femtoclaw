@@ -168,7 +168,9 @@ export function chatRoutes(deps: ServerDeps): Router {
         }
         return a.id.localeCompare(b.id);
       });
-      const existingMessages = sortedExistingMsgs.map((m) => ({
+      // Keep only recent history to reduce stale intent carry-over in long conversations.
+      const recentExistingMsgs = sortedExistingMsgs.slice(-30);
+      const existingMessages = recentExistingMsgs.map((m) => ({
         role: m.role,
         content: m.content,
       }));

@@ -140,6 +140,9 @@ function shouldDropHistoricalText(text: string): boolean {
   if (normalized === '') {
     return true;
   }
+  if (normalized.startsWith('<system-reminder>')) {
+    return true;
+  }
   if (normalized.startsWith('[Tool call]')) {
     return true;
   }
@@ -228,6 +231,7 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
   ): Promise<AgentRunResult> {
     const model = input.model ?? config.DEFAULT_MODEL;
+    const isMiniMaxModel = /minimax/i.test(model);
 
     // 1. Build system prompt
     const systemBlocks = await buildSystemPrompt(input.userId, {
@@ -370,7 +374,7 @@ export class AgentEngine {
         stream: true,
       };
 
-      if (input.thinking) {
+      if (input.thinking && !isMiniMaxModel) {
         (apiParams as unknown as Record<string, unknown>).thinking = {
           type: 'enabled',
           budget_tokens: input.max_thinking_tokens ?? 10000,
