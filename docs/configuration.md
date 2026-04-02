@@ -6,9 +6,9 @@ This document lists every configuration surface used by the current `code/` impl
 
 ### Required
 
-| Variable            | Purpose                      |
-| ------------------- | ---------------------------- |
-| `ANTHROPIC_API_KEY` | Anthropic-compatible API key |
+| Variable                  | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` | Anthropic-compatible API credential |
 
 ### Server
 
@@ -21,10 +21,12 @@ This document lists every configuration surface used by the current `code/` impl
 
 ### Anthropic Runtime
 
-| Variable             | Default                     | Purpose                                                           |
-| -------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Anthropic-compatible API base URL                                 |
-| `DEFAULT_MODEL`      | `claude-sonnet-4-20250514`  | Default model for `/chat`                                         |
+| Variable             | Default                              | Purpose                                                           |
+| -------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `ANTHROPIC_BASE_URL` | `https://api.minimaxi.com/anthropic` | Anthropic-compatible API base URL                                 |
+| `ANTHROPIC_AUTH_TOKEN` | empty                              | Preferred auth token                                               |
+| `ANTHROPIC_API_KEY`  | empty                                | API key auth (fallback when auth token is empty)                  |
+| `DEFAULT_MODEL`      | `MiniMax-M2.7`                       | Default model for `/chat`                                         |
 | `FALLBACK_MODEL`     | empty                       | Reserved fallback model field; not actively used in the main loop |
 | `MAX_OUTPUT_TOKENS`  | `16384`                     | Max tokens for a single Anthropic response                        |
 | `MAX_EXECUTION_MS`   | `300000`                    | Request timeout ceiling                                           |
@@ -73,16 +75,30 @@ Notes:
 
 ### Org Prompt
 
-| Variable                | Default | Purpose                             |
-| ----------------------- | ------- | ----------------------------------- |
-| `ORG_INSTRUCTIONS_PATH` | empty   | Optional org instructions file path |
+| Variable                | Default             | Purpose                             |
+| ----------------------- | ------------------- | ----------------------------------- |
+| `ORG_INSTRUCTIONS_PATH` | `/app/org/claude.md` | Optional org instructions file path |
 
 ### MCP
 
 | Variable             | Default                     | Purpose                          |
 | -------------------- | --------------------------- | -------------------------------- |
-| `MANAGED_MCP_CONFIG` | `./config/managed-mcp.json` | Managed MCP config JSON file     |
+| `MANAGED_MCP_CONFIG` | `/app/org/managed-mcp.json` | Managed MCP config JSON file     |
 | `ENABLE_MCP`         | `true`                      | Global MCP enable/disable switch |
+
+### Trace
+
+| Variable                    | Default                               | Purpose                                           |
+| --------------------------- | ------------------------------------- | ------------------------------------------------- |
+| `TRACE_ENABLED`             | `true`                                | Enable async trace sink                           |
+| `TRACE_ENDPOINT`            | `http://kapivault:80/trace/events`    | Trace sink endpoint                               |
+| `TRACE_API_KEY`             | empty                                 | Optional bearer token for trace sink              |
+| `TRACE_BATCH_SIZE`          | `50`                                  | Max events per flush                              |
+| `TRACE_FLUSH_INTERVAL_MS`   | `500`                                 | Flush cadence                                     |
+| `TRACE_QUEUE_MAX`           | `5000`                                | In-memory trace queue capacity                    |
+| `TRACE_TIMEOUT_MS`          | `1500`                                | HTTP timeout for trace flush                      |
+| `TRACE_INCLUDE_THINKING`    | `summary`                             | `off`, `summary`, or `full`                       |
+| `TRACE_THINKING_MAX_CHARS`  | `2000`                                | Max persisted thinking chars when enabled         |
 
 ### Request Shaping
 
@@ -115,7 +131,7 @@ Notes:
 | Path                         | Purpose                               |
 | ---------------------------- | ------------------------------------- |
 | `config/managed-mcp.json`    | Managed MCP server definitions        |
-| `config/org-instructions.md` | Optional org prompt content           |
+| `org/claude.md`              | Optional org prompt content           |
 | `skills/builtin/`            | Built-in skills shipped with the repo |
 | `skills/user/`               | Optional local user skill directory   |
 

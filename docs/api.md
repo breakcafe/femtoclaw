@@ -64,7 +64,8 @@ User identity is passed via request headers:
 ### Conversation Semantics
 
 - **Incremental client protocol**: send only the new user message plus optional `conversation_id`.
-- The server reloads persisted conversation history and rebuilds the full Anthropic `messages[]` context on each turn.
+- The server reloads persisted conversation history and rebuilds Anthropic `messages[]` context on each turn.
+- To reduce stale intent carry-over in long sessions, only a recent message window is included in model context.
 - History growth is controlled by automatic compaction, not by session resume handles.
 
 ---

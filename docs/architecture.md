@@ -9,7 +9,7 @@ Femtoclaw is a lightweight multi-user conversational agent service built directl
 - **No shell, no filesystem**: The agent cannot execute commands or read/write files. All external interaction happens through safe built-in tools and MCP.
 - **Business-layer isolation**: User data separation is enforced by `userId` checks at every storage and tool boundary, not by OS-level containers.
 - **Stateless service**: All persistent state lives in external storage (SQLite locally, or API/MCP backends). The service itself can be stopped and restarted without data loss.
-- **Incremental client, full-replay server**: Clients send only the current message. The server reloads history from storage and rebuilds the full Anthropic `messages[]` on each turn.
+- **Incremental client, bounded-replay server**: Clients send only the current message. The server reloads history from storage and rebuilds Anthropic `messages[]` on each turn using a recent message window.
 
 ---
 
