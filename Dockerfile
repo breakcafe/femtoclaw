@@ -105,7 +105,6 @@ COPY package.json ./
 COPY --from=builder /app/dist/        ./dist/
 COPY skills/ ./skills/
 COPY config/ ./config/
-COPY org/ ./org/
 
 # Create data directory — use appropriate non-root user
 RUN mkdir -p /data && \
