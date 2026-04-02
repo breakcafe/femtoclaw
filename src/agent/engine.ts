@@ -308,7 +308,9 @@ export class AgentEngine {
         { type: 'text', text: input.prompt, cache_control: { type: 'ephemeral' } } as any,
       ];
       messages.push({ role: 'user', content: userContent });
-      newMessages.push({ role: 'user', content: JSON.stringify(userContent) });
+      // Persist only raw user input to history (exclude dynamic preamble/reminders).
+      const storedUserContent: ContentBlock[] = [{ type: 'text', text: input.prompt }];
+      newMessages.push({ role: 'user', content: JSON.stringify(storedUserContent) });
     }
 
     // 5. Agent loop
