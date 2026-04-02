@@ -464,17 +464,20 @@ async function persistMessages(
   result: any,
   userId: string,
 ): Promise<void> {
-  const now = new Date().toISOString();
+  const baseTs = Date.now();
   const msgsToStore = [];
 
+  let index = 0;
   for (const msg of result.newMessages as Array<{ role: string; content: string }>) {
+    const createdAt = new Date(baseTs + index).toISOString();
+    index++;
     msgsToStore.push({
       conversationId,
       role: msg.role as 'user' | 'assistant',
       sender: msg.role === 'user' ? (body.sender ?? userId) : config.ASSISTANT_NAME,
       senderName: msg.role === 'user' ? body.sender_name : config.ASSISTANT_NAME,
       content: msg.content, // JSON-serialized ContentBlock[]
-      createdAt: now,
+      createdAt,
     });
   }
 

@@ -135,6 +135,30 @@ function recoverOrphanToolResult(toolUseId: string, content: string): TextBlock 
   };
 }
 
+function stringifyToolInput(input: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return '[unserializable tool input]';
+  }
+}
+
+function normalizeHistoricalBlock(block: ContentBlock): TextBlock {
+  if (block.type === 'text') {
+    return block;
+  }
+  if (block.type === 'tool_use') {
+    return {
+      type: 'text',
+      text: `[Tool call] ${block.name}(${stringifyToolInput(block.input)})`,
+    };
+  }
+  return {
+    type: 'text',
+    text: `[Tool result] id=${block.tool_use_id}\n${block.content}`,
+  };
+}
+
 function sanitizeToolLinkage(messages: ApiMessage[]): {
   messages: ApiMessage[];
   orphanedToolResults: number;
@@ -248,7 +272,11 @@ export class AgentEngine {
       for (const msg of input.existingMessages) {
         try {
           const parsed = JSON.parse(msg.content);
-          messages.push({ role: msg.role, content: parsed });
+          const parsedBlocks = Array.isArray(parsed) ? (parsed as ContentBlock[]) : [];
+          // Normalize historical tool blocks to text for strict Anthropic-compatible providers
+          // (e.g. MiniMax) that may reject stale/non-adjacent tool linkage in prior turns.
+          const normalizedBlocks = parsedBlocks.map(normalizeHistoricalBlock);
+          messages.push({ role: msg.role, content: normalizedBlocks });
         } catch {
           // Legacy plain-text fallback
           messages.push({ role: msg.role, content: [{ type: 'text', text: msg.content }] });
