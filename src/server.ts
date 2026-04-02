@@ -11,6 +11,7 @@ import { logger } from './utils/logger.js';
 import type { ConversationManager } from './conversation/manager.js';
 import type { SkillManagerInterface, MemoryServiceInterface } from './types.js';
 import type { McpClientPool } from './mcp/client-pool.js';
+import type { TraceSink } from './trace/sink.js';
 
 const APP_VERSION = process.env.APP_VERSION || '0.1.0';
 const BUILD_COMMIT = process.env.BUILD_COMMIT || 'unknown';
@@ -20,6 +21,7 @@ export interface ServerDeps {
   skillManager: SkillManagerInterface;
   memoryService: MemoryServiceInterface;
   mcpClientPool: McpClientPool;
+  traceSink: TraceSink;
 }
 
 export function createApp(deps: ServerDeps): express.Express {

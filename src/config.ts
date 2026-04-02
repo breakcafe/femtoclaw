@@ -7,6 +7,7 @@ export interface Config {
 
   // Anthropic
   ANTHROPIC_API_KEY: string;
+  ANTHROPIC_AUTH_TOKEN: string;
   ANTHROPIC_BASE_URL: string;
   DEFAULT_MODEL: string;
   FALLBACK_MODEL: string;
@@ -21,6 +22,8 @@ export interface Config {
   MEMORY_SERVICE_TYPE: 'sqlite' | 'mcp' | 'api';
   MEMORY_SERVICE_URL: string;
   MEMORY_SERVICE_API_KEY: string;
+  MEMORY_SERVICE_AUTH_HEADER: string;
+  MEMORY_SERVICE_AUTH_SCHEME: string;
   MEMORY_MCP_SERVER: string;
   MAX_MEMORY_ENTRIES_PER_USER: number;
   MAX_MEMORY_VALUE_LENGTH: number;
@@ -31,6 +34,7 @@ export interface Config {
   CONVERSATION_STORE_TYPE: 'sqlite' | 'api';
   CONVERSATION_STORE_URL: string;
   CONVERSATION_STORE_API_KEY: string;
+  CONVERSATION_IDLE_TIMEOUT_SECONDS: number;
   SQLITE_DB_PATH: string;
 
   // Skills
@@ -52,6 +56,15 @@ export interface Config {
 
   // Feature toggles
   ENABLE_MCP: boolean;
+  TRACE_ENABLED: boolean;
+  TRACE_ENDPOINT: string;
+  TRACE_API_KEY: string;
+  TRACE_BATCH_SIZE: number;
+  TRACE_FLUSH_INTERVAL_MS: number;
+  TRACE_QUEUE_MAX: number;
+  TRACE_TIMEOUT_MS: number;
+  TRACE_INCLUDE_THINKING: 'off' | 'summary' | 'full';
+  TRACE_THINKING_MAX_CHARS: number;
 
   /**
    * When true, requests without X-User-Id header are rejected with 400.
@@ -91,9 +104,10 @@ export const config: Config = {
   LOG_LEVEL: env('LOG_LEVEL', 'info'),
   DEFAULT_TIMEZONE: env('DEFAULT_TIMEZONE', 'UTC'),
 
-  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY'),
-  ANTHROPIC_BASE_URL: env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
-  DEFAULT_MODEL: env('DEFAULT_MODEL', 'claude-sonnet-4-20250514'),
+  ANTHROPIC_API_KEY: env('ANTHROPIC_API_KEY', env('X_API_KEY', env('API_KEY'))),
+  ANTHROPIC_AUTH_TOKEN: env('ANTHROPIC_AUTH_TOKEN'),
+  ANTHROPIC_BASE_URL: env('ANTHROPIC_BASE_URL', 'https://api.minimaxi.com/anthropic'),
+  DEFAULT_MODEL: env('DEFAULT_MODEL', 'MiniMax-M2.7'),
   FALLBACK_MODEL: env('FALLBACK_MODEL'),
   MAX_OUTPUT_TOKENS: envInt('MAX_OUTPUT_TOKENS', 16384),
   MAX_EXECUTION_MS: envInt('MAX_EXECUTION_MS', 300000),
@@ -104,6 +118,8 @@ export const config: Config = {
   MEMORY_SERVICE_TYPE: env('MEMORY_SERVICE_TYPE', 'sqlite') as Config['MEMORY_SERVICE_TYPE'],
   MEMORY_SERVICE_URL: env('MEMORY_SERVICE_URL'),
   MEMORY_SERVICE_API_KEY: env('MEMORY_SERVICE_API_KEY'),
+  MEMORY_SERVICE_AUTH_HEADER: env('MEMORY_SERVICE_AUTH_HEADER', 'Authorization'),
+  MEMORY_SERVICE_AUTH_SCHEME: env('MEMORY_SERVICE_AUTH_SCHEME', 'Bearer'),
   MEMORY_MCP_SERVER: env('MEMORY_MCP_SERVER', 'memory'),
   MAX_MEMORY_ENTRIES_PER_USER: envInt('MAX_MEMORY_ENTRIES_PER_USER', 200),
   MAX_MEMORY_VALUE_LENGTH: envInt('MAX_MEMORY_VALUE_LENGTH', 2000),
@@ -116,21 +132,34 @@ export const config: Config = {
   ) as Config['CONVERSATION_STORE_TYPE'],
   CONVERSATION_STORE_URL: env('CONVERSATION_STORE_URL'),
   CONVERSATION_STORE_API_KEY: env('CONVERSATION_STORE_API_KEY'),
+  CONVERSATION_IDLE_TIMEOUT_SECONDS: envInt('CONVERSATION_IDLE_TIMEOUT_SECONDS', 1800),
   SQLITE_DB_PATH: env('SQLITE_DB_PATH', './data/femtoclaw.db'),
 
   BUILTIN_SKILLS_DIR: env('BUILTIN_SKILLS_DIR', './skills/builtin'),
   ORG_SKILLS_URL: env('ORG_SKILLS_URL'),
   USER_SKILLS_DIR: env('USER_SKILLS_DIR', './skills/user'),
 
-  MANAGED_MCP_CONFIG: env('MANAGED_MCP_CONFIG', './config/managed-mcp.json'),
+  MANAGED_MCP_CONFIG: env('MANAGED_MCP_CONFIG', '/app/org/managed-mcp.json'),
 
-  ORG_INSTRUCTIONS_PATH: env('ORG_INSTRUCTIONS_PATH'),
+  ORG_INSTRUCTIONS_PATH: env('ORG_INSTRUCTIONS_PATH', '/app/org/claude.md'),
 
   RATE_LIMIT_RPM: envInt('RATE_LIMIT_RPM', 60),
 
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
 
   ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
+  TRACE_ENABLED: env('TRACE_ENABLED', 'true') === 'true',
+  TRACE_ENDPOINT: env('TRACE_ENDPOINT', 'http://kapivault:80/trace/events'),
+  TRACE_API_KEY: env('TRACE_API_KEY'),
+  TRACE_BATCH_SIZE: envInt('TRACE_BATCH_SIZE', 50),
+  TRACE_FLUSH_INTERVAL_MS: envInt('TRACE_FLUSH_INTERVAL_MS', 500),
+  TRACE_QUEUE_MAX: envInt('TRACE_QUEUE_MAX', 5000),
+  TRACE_TIMEOUT_MS: envInt('TRACE_TIMEOUT_MS', 1500),
+  TRACE_INCLUDE_THINKING: env(
+    'TRACE_INCLUDE_THINKING',
+    'summary',
+  ) as Config['TRACE_INCLUDE_THINKING'],
+  TRACE_THINKING_MAX_CHARS: envInt('TRACE_THINKING_MAX_CHARS', 2000),
   REQUIRE_USER_ID: env('REQUIRE_USER_ID', 'false') === 'true',
   ALLOWED_TOOLS: env('ALLOWED_TOOLS', '*'),
 };

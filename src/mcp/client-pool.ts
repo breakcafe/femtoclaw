@@ -15,6 +15,7 @@ interface ConnectedServer {
   client: Client;
   tools: McpToolDefinition[];
   connectedAt: number;
+  config?: McpServerConfig;
 }
 
 export class McpClientPool {
@@ -156,7 +157,23 @@ export class McpClientPool {
     }
 
     try {
-      const result = await server.client.callTool({ name: toolName, arguments: args });
+      const cleanedArgs: Record<string, unknown> = { ...args };
+      const headers = server.config?.headers ?? {};
+      const sessionIdHeader =
+        headers['X-MCP-Session-Id'] ??
+        headers['x-mcp-session-id'] ??
+        headers['X-MCP-SESSION-ID'] ??
+        '';
+      const sessionId = typeof sessionIdHeader === 'string' ? sessionIdHeader.trim() : '';
+
+      // kapii-mcp auth middleware expects arguments.user_id to be sessionId.
+      if (serverName === 'kapi' && sessionId) {
+        cleanedArgs.user_id = sessionId;
+      }
+      // Keep session id in header/context, do not pass as tool argument.
+      delete cleanedArgs.mcp_session_id;
+
+      const result = await server.client.callTool({ name: toolName, arguments: cleanedArgs });
       return result as McpCallToolResult;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -222,7 +239,7 @@ export class McpClientPool {
       );
     }
 
-    return { client, tools, connectedAt: Date.now() };
+    return { client, tools, connectedAt: Date.now(), config: cfg };
   }
 
   private async connectServer(name: string, cfg: McpServerConfig): Promise<Client> {

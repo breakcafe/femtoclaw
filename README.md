@@ -30,14 +30,14 @@ Internal notes, prompt dumps, and test reports live in the outer workspace `../d
 ```bash
 npm install
 cp .env.example .env
-ANTHROPIC_API_KEY=sk-ant-xxx npm run dev
+ANTHROPIC_AUTH_TOKEN=token-xxx npm run dev
 ```
 
 Production:
 
 ```bash
 npm run build
-ANTHROPIC_API_KEY=sk-ant-xxx npm start
+ANTHROPIC_AUTH_TOKEN=token-xxx npm start
 ```
 
 ## Docker
@@ -55,6 +55,13 @@ docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
 # Run
 docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:latest
 ```
+
+Optional local prepackaged assets can be supplied from `dev-data/assets/` at build time:
+
+- `dev-data/assets/org/**` -> `/app/org/`
+- `dev-data/assets/skills/**` -> `/app/skills/`
+
+If the directory is absent, build continues normally.
 
 Pre-built images are available from GHCR:
 
@@ -84,7 +91,8 @@ curl -N -X POST http://localhost:9000/chat \
 Conversation history behavior:
 
 - Clients use an incremental protocol: each `POST /chat` sends only the new message plus optional `conversation_id`.
-- The current femtoclaw runtime reloads persisted conversation history and replays the full reconstructed Anthropic `messages[]` on each turn.
+- The current femtoclaw runtime reloads persisted conversation history and replays reconstructed Anthropic `messages[]` on each turn.
+- To reduce stale-intent carry-over, only the most recent 12 persisted messages are included in the model context.
 - This differs from picoclaw internals, which also expose an incremental client API but can additionally use Claude Agent SDK session resume metadata.
 
 Resume an `AskUserQuestion` turn:
@@ -125,7 +133,7 @@ Current build supports three tiers through directories:
 
 ## MCP
 
-Managed MCP servers are loaded from `config/managed-mcp.json`.
+Managed MCP servers are loaded from `MANAGED_MCP_CONFIG` (default `/app/org/managed-mcp.json`).
 
 Supported transports:
 
@@ -144,22 +152,32 @@ Per-request MCP servers can be attached through `POST /chat { mcp_servers, mcp_c
 
 Important variables:
 
-| Variable                  | Default                     | Description                                       |
-| ------------------------- | --------------------------- | ------------------------------------------------- |
-| `PORT`                    | `9000`                      | HTTP port                                         |
-| `API_TOKEN`               | empty                       | Bearer token auth                                 |
-| `DEFAULT_MODEL`           | `claude-sonnet-4-20250514`  | Default Anthropic model                           |
-| `SQLITE_DB_PATH`          | `./data/femtoclaw.db`       | Shared SQLite path for conversation + memory      |
-| `CONVERSATION_STORE_TYPE` | `sqlite`                    | `sqlite` or `api`                                 |
-| `MEMORY_SERVICE_TYPE`     | `sqlite`                    | `sqlite`, `api`, or `mcp`                         |
-| `MEMORY_MCP_SERVER`       | `memory`                    | MCP server name used by `MEMORY_SERVICE_TYPE=mcp` |
-| `ORG_SKILLS_URL`          | empty                       | Local org skills directory                        |
-| `USER_SKILLS_DIR`         | `./skills/user`             | Optional user skill directory                     |
-| `MANAGED_MCP_CONFIG`      | `./config/managed-mcp.json` | Managed MCP config file                           |
-| `INPUT_TIMEOUT_MS`        | `300000`                    | Pending question expiration                       |
-| `ALLOWED_TOOLS`           | `*`                         | Built-in tool allowlist                           |
+| Variable                     | Default                          | Description                                       |
+| ---------------------------- | -------------------------------- | ------------------------------------------------- |
+| `PORT`                       | `9000`                           | HTTP port                                         |
+| `API_TOKEN`                  | empty                            | Bearer token auth                                 |
+| `ANTHROPIC_BASE_URL`         | `https://api.minimaxi.com/anthropic` | Anthropic-compatible base URL                 |
+| `ANTHROPIC_AUTH_TOKEN`       | empty                            | Preferred auth token for Anthropic-compatible APIs |
+| `ANTHROPIC_API_KEY`          | empty                            | API key auth (fallback when auth token is empty)  |
+| `DEFAULT_MODEL`              | `MiniMax-M2.7`                   | Default model                                     |
+| `SQLITE_DB_PATH`             | `./data/femtoclaw.db`            | Shared SQLite path for conversation + memory      |
+| `CONVERSATION_STORE_TYPE`    | `sqlite`                         | `sqlite` or `api`                                 |
+| `MEMORY_SERVICE_TYPE`        | `sqlite`                         | `sqlite`, `api`, or `mcp`                         |
+| `MEMORY_SERVICE_AUTH_HEADER` | `Authorization`                  | Auth header name for API memory backend           |
+| `MEMORY_SERVICE_AUTH_SCHEME` | `Bearer`                         | Auth scheme prefix; empty means raw token mode    |
+| `MEMORY_MCP_SERVER`          | `memory`                         | MCP server name used by `MEMORY_SERVICE_TYPE=mcp` |
+| `ORG_SKILLS_URL`             | empty                            | Local org skills directory                        |
+| `USER_SKILLS_DIR`            | `./skills/user`                  | Optional user skill directory                     |
+| `ORG_INSTRUCTIONS_PATH`      | `/app/org/claude.md`             | Org instruction file path                         |
+| `MANAGED_MCP_CONFIG`         | `/app/org/managed-mcp.json`      | Managed MCP config file                           |
+| `TRACE_ENABLED`              | `true`                           | Enable async trace sink                           |
+| `TRACE_ENDPOINT`             | `http://kapivault:80/trace/events` | Trace ingest endpoint                          |
+| `INPUT_TIMEOUT_MS`           | `300000`                         | Pending question expiration                       |
+| `ALLOWED_TOOLS`              | `*`                              | Built-in tool allowlist                           |
 
 Full configuration reference: `docs/configuration.md`
+
+For `MEMORY_SERVICE_TYPE=api`, URL/auth can also fall back to the managed MCP server entry named by `MEMORY_MCP_SERVER` (including optional `auth` fields in `managed-mcp.json`), while explicit env vars remain highest priority.
 
 ## Makefile
 

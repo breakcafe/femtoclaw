@@ -6,45 +6,71 @@ import type {
   WriteMemoryInput,
 } from '../types.js';
 
+export interface ApiMemoryAuthOptions {
+  authHeader?: string;
+  authScheme?: string;
+}
+
 export class ApiMemoryService implements MemoryServiceInterface {
   constructor(
     private baseUrl: string,
     private apiKey: string,
+    private auth: ApiMemoryAuthOptions = {},
   ) {}
+
+  private buildHeaders(extra?: RequestInit['headers']): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.apiKey?.trim()) {
+      const authHeader = this.auth.authHeader?.trim() || 'Authorization';
+      const authScheme = this.auth.authScheme?.trim() ?? 'Bearer';
+      headers[authHeader] = authScheme ? `${authScheme} ${this.apiKey}` : this.apiKey;
+    }
+    if (!extra) {
+      return headers;
+    }
+    return { ...headers, ...(extra as Record<string, string>) };
+  }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const resp = await fetch(`${this.baseUrl}${path}`, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers: this.buildHeaders(options?.headers),
     });
     if (!resp.ok) throw new Error(`Memory API error: ${resp.status}`);
-    return resp.json() as Promise<T>;
+    if (resp.status === 204) {
+      return undefined as T;
+    }
+    const text = await resp.text();
+    if (!text.trim()) {
+      return undefined as T;
+    }
+    return JSON.parse(text) as T;
   }
 
   async listMemories(userId: string, category?: MemoryType): Promise<MemoryEntrySummary[]> {
     const params = category ? `?category=${category}` : '';
-    return this.request<MemoryEntrySummary[]>(`/memory/${userId}${params}`);
+    return this.request<MemoryEntrySummary[]>(`/memory/${encodeURIComponent(userId)}${params}`);
   }
 
   async readMemory(userId: string, key?: string): Promise<MemoryEntry | MemoryEntry[]> {
     return this.request<MemoryEntry | MemoryEntry[]>(
-      `/memory/${userId}${key ? `/${encodeURIComponent(key)}` : '/all'}`,
+      `/memory/${encodeURIComponent(userId)}${key ? `/${encodeURIComponent(key)}` : '/all'}`,
     );
   }
 
   async writeMemory(userId: string, input: WriteMemoryInput): Promise<void> {
-    await this.request(`/memory/${userId}/${encodeURIComponent(input.key)}`, {
+    await this.request(`/memory/${encodeURIComponent(userId)}/${encodeURIComponent(input.key)}`, {
       method: 'PUT',
       body: JSON.stringify({ ...input, source: 'agent' }),
     });
   }
 
   async deleteMemory(userId: string, key: string): Promise<void> {
-    await this.request(`/memory/${userId}/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    await this.request(`/memory/${encodeURIComponent(userId)}/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
   }
 
   async searchMemory(
@@ -54,6 +80,8 @@ export class ApiMemoryService implements MemoryServiceInterface {
   ): Promise<MemoryEntrySummary[]> {
     const params = new URLSearchParams({ q: query });
     if (category) params.set('category', category);
-    return this.request<MemoryEntrySummary[]>(`/memory/${userId}/search?${params}`);
+    return this.request<MemoryEntrySummary[]>(
+      `/memory/${encodeURIComponent(userId)}/search?${params}`,
+    );
   }
 }

@@ -38,8 +38,8 @@ const chatRequestSchema = z.object({
 
 export function chatRoutes(deps: ServerDeps): Router {
   const router = Router();
-  const { conversationManager, skillManager, memoryService, mcpClientPool } = deps;
-  const agentEngine = new AgentEngine(skillManager, memoryService, mcpClientPool);
+  const { conversationManager, skillManager, memoryService, mcpClientPool, traceSink } = deps;
+  const agentEngine = new AgentEngine(skillManager, memoryService, mcpClientPool, traceSink);
 
   // POST /chat — Send message / continue conversation
   router.post('/chat', async (req: Request, res: Response) => {
@@ -51,10 +51,40 @@ export function chatRoutes(deps: ServerDeps): Router {
 
     const body = parsed.data as ChatRequest;
     const userId = req.userContext?.userId ?? 'anonymous';
+    const requestId = String(res.getHeader('X-Request-ID') ?? req.headers['x-request-id'] ?? '');
+    const traceId = `trace-${randomUUID()}`;
     const messageId = `msg-${randomUUID()}`;
+    traceSink.emit({
+      trace_id: traceId,
+      event_type: 'chat_request_received',
+      request_id: requestId,
+      user_id: userId,
+      message_id: messageId,
+      conversation_id: body.conversation_id,
+      payload: {
+        stream: body.stream !== false,
+        model: body.model,
+        has_input_response: !!body.input_response,
+        prompt_preview: (body.message ?? '').slice(0, 500),
+        prompt_length: (body.message ?? '').length,
+      },
+    });
     const pausedInput = body.conversation_id
       ? conversationManager.getPausedInput(body.conversation_id)
       : null;
+
+    if (pausedInput && !body.input_response) {
+      res.status(409).json({
+        error: 'input_response required before sending a new message',
+        input_required: {
+          type: 'ask_user_question',
+          tool_use_id: pausedInput.toolUseId,
+          questions: pausedInput.questions,
+          timeout_ms: pausedInput.timeoutMs,
+        },
+      });
+      return;
+    }
 
     if (body.input_response) {
       if (!body.conversation_id) {
@@ -86,6 +116,18 @@ export function chatRoutes(deps: ServerDeps): Router {
         userId,
         body.conversation_id,
       );
+      traceSink.emit({
+        trace_id: traceId,
+        event_type: 'conversation_opened_or_reused',
+        request_id: requestId,
+        user_id: userId,
+        conversation_id: conversation.id,
+        message_id: messageId,
+        payload: {
+          requested_conversation_id: body.conversation_id ?? null,
+          resolved_conversation_id: conversation.id,
+        },
+      });
     } catch (err) {
       if (err instanceof ConversationNotFoundError) {
         res.status(404).json({ error: err.message });
@@ -118,7 +160,17 @@ export function chatRoutes(deps: ServerDeps): Router {
 
       // Load existing messages
       const existingMsgs = await conversationManager.getMessages(conversation.id);
-      const existingMessages = existingMsgs.map((m) => ({
+      const sortedExistingMsgs = [...existingMsgs].sort((a, b) => {
+        const ta = Date.parse(a.createdAt);
+        const tb = Date.parse(b.createdAt);
+        if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) {
+          return ta - tb;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      // Keep only recent history to reduce stale intent carry-over in long conversations.
+      const recentExistingMsgs = sortedExistingMsgs.slice(-12);
+      const existingMessages = recentExistingMsgs.map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -147,6 +199,8 @@ export function chatRoutes(deps: ServerDeps): Router {
         existingMessages,
         resumeInputResponse,
         pauseOnInput: true,
+        traceId,
+        requestId,
       };
 
       const isStreaming = body.stream !== false;
@@ -177,6 +231,21 @@ export function chatRoutes(deps: ServerDeps): Router {
             result.awaiting_input.questions,
           );
           sseWriter.end();
+          const durationMs = Date.now() - startTime;
+          traceSink.emit({
+            trace_id: traceId,
+            event_type: 'chat_completed',
+            request_id: requestId,
+            user_id: userId,
+            conversation_id: conversation.id,
+            message_id: messageId,
+            payload: {
+              status: 'awaiting_input',
+              duration_ms: durationMs,
+              stop_reason: result.stop_reason,
+              usage: result.usage,
+            },
+          });
           return;
         }
 
@@ -188,6 +257,21 @@ export function chatRoutes(deps: ServerDeps): Router {
           },
         });
         sseWriter.end();
+        const durationMs = Date.now() - startTime;
+        traceSink.emit({
+          trace_id: traceId,
+          event_type: 'chat_completed',
+          request_id: requestId,
+          user_id: userId,
+          conversation_id: conversation.id,
+          message_id: messageId,
+          payload: {
+            status: abortController.signal.aborted ? 'timeout' : 'success',
+            duration_ms: durationMs,
+            stop_reason: result.stop_reason,
+            usage: result.usage,
+          },
+        });
       } else {
         // Non-streaming
         const collector = new StreamCollector();
@@ -220,6 +304,20 @@ export function chatRoutes(deps: ServerDeps): Router {
           };
 
           res.status(202).json(response);
+          traceSink.emit({
+            trace_id: traceId,
+            event_type: 'chat_completed',
+            request_id: requestId,
+            user_id: userId,
+            conversation_id: conversation.id,
+            message_id: messageId,
+            payload: {
+              status: response.status,
+              duration_ms: durationMs,
+              stop_reason: result.stop_reason,
+              usage: result.usage,
+            },
+          });
           return;
         }
 
@@ -235,10 +333,35 @@ export function chatRoutes(deps: ServerDeps): Router {
         };
 
         res.json(response);
+        traceSink.emit({
+          trace_id: traceId,
+          event_type: 'chat_completed',
+          request_id: requestId,
+          user_id: userId,
+          conversation_id: conversation.id,
+          message_id: messageId,
+          payload: {
+            status: response.status,
+            duration_ms: durationMs,
+            stop_reason: result.stop_reason,
+            usage: result.usage,
+          },
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, conversationId: conversation.id }, 'Agent execution error');
+      traceSink.emit({
+        trace_id: traceId,
+        event_type: 'chat_failed',
+        request_id: requestId,
+        user_id: userId,
+        conversation_id: conversation.id,
+        message_id: messageId,
+        payload: {
+          error: message,
+        },
+      });
 
       if (!res.headersSent) {
         res.status(500).json({
@@ -343,17 +466,20 @@ async function persistMessages(
   result: any,
   userId: string,
 ): Promise<void> {
-  const now = new Date().toISOString();
+  const baseTs = Date.now();
   const msgsToStore = [];
 
+  let index = 0;
   for (const msg of result.newMessages as Array<{ role: string; content: string }>) {
+    const createdAt = new Date(baseTs + index).toISOString();
+    index++;
     msgsToStore.push({
       conversationId,
       role: msg.role as 'user' | 'assistant',
       sender: msg.role === 'user' ? (body.sender ?? userId) : config.ASSISTANT_NAME,
       senderName: msg.role === 'user' ? body.sender_name : config.ASSISTANT_NAME,
       content: msg.content, // JSON-serialized ContentBlock[]
-      createdAt: now,
+      createdAt,
     });
   }
 

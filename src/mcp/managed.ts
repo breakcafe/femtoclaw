@@ -12,6 +12,26 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return Object.values(value).every((entry) => typeof entry === 'string');
 }
 
+function parseAuthConfig(
+  value: unknown,
+): { header?: string; scheme?: string; token?: string } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const auth = value as Record<string, unknown>;
+  const parsed: { header?: string; scheme?: string; token?: string } = {};
+  if (typeof auth.header === 'string' && auth.header.trim()) {
+    parsed.header = auth.header.trim();
+  }
+  if (typeof auth.scheme === 'string') {
+    parsed.scheme = auth.scheme.trim();
+  }
+  if (typeof auth.token === 'string' && auth.token.trim()) {
+    parsed.token = auth.token.trim();
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function validateServerConfig(name: string, raw: unknown): McpServerConfig | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     logger.warn({ name }, 'Invalid MCP config entry, expected an object');
@@ -30,6 +50,7 @@ function validateServerConfig(name: string, raw: unknown): McpServerConfig | nul
       type,
       url: cfg.url,
       headers: isStringRecord(cfg.headers) ? cfg.headers : undefined,
+      auth: parseAuthConfig(cfg.auth),
     };
   }
 
@@ -45,6 +66,7 @@ function validateServerConfig(name: string, raw: unknown): McpServerConfig | nul
         ? cfg.args.filter((arg): arg is string => typeof arg === 'string')
         : undefined,
       env: isStringRecord(cfg.env) ? cfg.env : undefined,
+      auth: parseAuthConfig(cfg.auth),
     };
   }
 

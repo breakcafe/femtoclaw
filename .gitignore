@@ -141,3 +141,19 @@ vite.config.ts.timestamp-*
 # Projects
 dev-data/
 data/
+
+# Local org/business skill data (do not check in)
+org/
+skills/skill-a-data-query/
+skills/skill-b-budget/
+skills/skill-c-faq/
+skills/skill-d-record-ops/
+skills/skill-e-analysis/
+skills/skill-f-chat/
+skills/skill-weekly-letter/
+skills/skill-monthly-letter/
+
+# Temp artifacts
+.DS_Store
+__pycache__/
+*.pyc

@@ -8,6 +8,7 @@ import { executeTool, type ToolUseBlock, type ToolResultBlock } from '../tools/e
 import { getAllToolDefinitions } from '../tools/index.js';
 import type { AnthropicToolDefinition } from '../mcp/tool-mapper.js';
 import type { McpClientPool } from '../mcp/client-pool.js';
+import type { TraceSink } from '../trace/sink.js';
 import type {
   AskUserQuestionItem,
   StreamEvent,
@@ -68,6 +69,8 @@ export interface AgentRunInput {
   resumeInputResponse?: InputResponse;
   /** When true, AskUserQuestion returns awaiting_input instead of blocking the HTTP request. */
   pauseOnInput?: boolean;
+  traceId?: string;
+  requestId?: string;
 }
 
 export interface AgentRunResult {
@@ -125,6 +128,83 @@ function buildUserInputToolResult(response: InputResponse): ToolResultContentBlo
   };
 }
 
+function recoverOrphanToolResult(toolUseId: string, content: string): TextBlock {
+  return {
+    type: 'text',
+    text: `Recovered orphan tool_result (tool_use_id=${toolUseId}).\n${content}`,
+  };
+}
+
+function shouldDropHistoricalText(text: string): boolean {
+  const normalized = text.trim();
+  if (normalized === '') {
+    return true;
+  }
+  if (normalized.startsWith('<system-reminder>')) {
+    return true;
+  }
+  if (normalized.startsWith('[Tool call]')) {
+    return true;
+  }
+  if (normalized.startsWith('[Tool result]')) {
+    return true;
+  }
+  if (normalized.startsWith('Recovered orphan tool_result')) {
+    return true;
+  }
+  return false;
+}
+
+function normalizeHistoricalBlock(block: ContentBlock): TextBlock | null {
+  if (block.type === 'text') {
+    if (shouldDropHistoricalText(block.text)) {
+      return null;
+    }
+    return block;
+  }
+  // Drop historical tool_use/tool_result blocks to avoid stale linkage errors
+  // and prevent models from imitating pseudo tool-call text.
+  return null;
+}
+
+function sanitizeToolLinkage(messages: ApiMessage[]): {
+  messages: ApiMessage[];
+  orphanedToolResults: number;
+} {
+  const seenToolUseIds = new Set<string>();
+  const sanitized: ApiMessage[] = [];
+  let orphanedToolResults = 0;
+
+  for (const message of messages) {
+    const nextBlocks: ContentBlock[] = [];
+    for (const block of message.content) {
+      if (block.type === 'tool_use' && message.role === 'assistant') {
+        seenToolUseIds.add(block.id);
+        nextBlocks.push(block);
+        continue;
+      }
+
+      if (block.type === 'tool_result' && message.role === 'user') {
+        if (seenToolUseIds.has(block.tool_use_id)) {
+          nextBlocks.push(block);
+        } else {
+          orphanedToolResults++;
+          nextBlocks.push(recoverOrphanToolResult(block.tool_use_id, block.content));
+        }
+        continue;
+      }
+
+      nextBlocks.push(block);
+    }
+
+    if (nextBlocks.length > 0) {
+      sanitized.push({ role: message.role, content: nextBlocks });
+    }
+  }
+
+  return { messages: sanitized, orphanedToolResults };
+}
+
 export class AgentEngine {
   private anthropic: Anthropic;
 
@@ -132,9 +212,14 @@ export class AgentEngine {
     private skillManager: SkillManagerInterface,
     private memoryService: MemoryServiceInterface,
     private mcpClientPool: McpClientPool,
+    private traceSink: TraceSink,
   ) {
+    const authOptions =
+      config.ANTHROPIC_AUTH_TOKEN.trim() !== ''
+        ? { authToken: config.ANTHROPIC_AUTH_TOKEN }
+        : { apiKey: config.ANTHROPIC_API_KEY };
     this.anthropic = new Anthropic({
-      apiKey: config.ANTHROPIC_API_KEY,
+      ...authOptions,
       baseURL: config.ANTHROPIC_BASE_URL,
     });
   }
@@ -146,6 +231,7 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
   ): Promise<AgentRunResult> {
     const model = input.model ?? config.DEFAULT_MODEL;
+    const isMiniMaxModel = /minimax/i.test(model);
 
     // 1. Build system prompt
     const systemBlocks = await buildSystemPrompt(input.userId, {
@@ -176,6 +262,17 @@ export class AgentEngine {
       activeToolNames,
     );
 
+    this.emitTrace(input, 'context_built', {
+      model,
+      system_blocks: systemBlocks,
+      preamble_blocks: preambleBlocks,
+      existing_message_count: input.existingMessages?.length ?? 0,
+      existing_messages_preview: (input.existingMessages ?? []).slice(-20),
+      current_prompt_preview: input.prompt.slice(0, 2000),
+      available_tools: tools.map((t) => t.name),
+      mcp_warnings: mcpWarnings,
+    });
+
     // 4. Construct messages in Anthropic API format
     const messages: ApiMessage[] = [];
 
@@ -184,7 +281,15 @@ export class AgentEngine {
       for (const msg of input.existingMessages) {
         try {
           const parsed = JSON.parse(msg.content);
-          messages.push({ role: msg.role, content: parsed });
+          const parsedBlocks = Array.isArray(parsed) ? (parsed as ContentBlock[]) : [];
+          // Normalize historical tool blocks to text for strict Anthropic-compatible providers
+          // (e.g. MiniMax) that may reject stale/non-adjacent tool linkage in prior turns.
+          const normalizedBlocks = parsedBlocks
+            .map(normalizeHistoricalBlock)
+            .filter((b): b is TextBlock => b !== null);
+          if (normalizedBlocks.length > 0) {
+            messages.push({ role: msg.role, content: normalizedBlocks });
+          }
         } catch {
           // Legacy plain-text fallback
           messages.push({ role: msg.role, content: [{ type: 'text', text: msg.content }] });
@@ -207,7 +312,9 @@ export class AgentEngine {
         { type: 'text', text: input.prompt, cache_control: { type: 'ephemeral' } } as any,
       ];
       messages.push({ role: 'user', content: userContent });
-      newMessages.push({ role: 'user', content: JSON.stringify(userContent) });
+      // Persist only raw user input to history (exclude dynamic preamble/reminders).
+      const storedUserContent: ContentBlock[] = [{ type: 'text', text: input.prompt }];
+      newMessages.push({ role: 'user', content: JSON.stringify(storedUserContent) });
     }
 
     // 5. Agent loop
@@ -227,6 +334,33 @@ export class AgentEngine {
       }
 
       // Create API request
+      const sanitizeResult = sanitizeToolLinkage(messages);
+      messages.length = 0;
+      messages.push(...sanitizeResult.messages);
+      if (sanitizeResult.orphanedToolResults > 0) {
+        logger.warn(
+          {
+            conversationId: input.conversationId,
+            loop: loopCount,
+            orphanedToolResults: sanitizeResult.orphanedToolResults,
+          },
+          'Recovered orphan tool_result blocks before model call',
+        );
+        this.emitTrace(input, 'tool_linkage_recovered', {
+          loop: loopCount,
+          orphaned_tool_results: sanitizeResult.orphanedToolResults,
+        });
+      }
+
+      const loopStartMs = Date.now();
+      let loopInputTokens = 0;
+      let loopOutputTokens = 0;
+      this.emitTrace(input, 'model_call_start', {
+        loop: loopCount,
+        model,
+        message_count: messages.length,
+        tool_count: tools.length,
+      });
       const apiParams: Anthropic.MessageCreateParams = {
         model,
         max_tokens: config.MAX_OUTPUT_TOKENS,
@@ -240,7 +374,7 @@ export class AgentEngine {
         stream: true,
       };
 
-      if (input.thinking) {
+      if (input.thinking && !isMiniMaxModel) {
         (apiParams as unknown as Record<string, unknown>).thinking = {
           type: 'enabled',
           budget_tokens: input.max_thinking_tokens ?? 10000,
@@ -264,6 +398,7 @@ export class AgentEngine {
       // Collect assistant content blocks
       const assistantBlocks: ContentBlock[] = [];
       let currentText = '';
+      let thinkingText = '';
       const toolUseBlocks: ToolUseBlock[] = [];
       let currentToolUse: { id: string; name: string; inputJson: string } | null = null;
 
@@ -295,6 +430,7 @@ export class AgentEngine {
               currentText += delta.text;
               onEvent({ type: 'text_delta', data: { text: delta.text } });
             } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+              thinkingText += String(delta.thinking);
               onEvent({ type: 'thinking_delta', data: { thinking: delta.thinking } });
             } else if (delta?.type === 'input_json_delta' && currentToolUse) {
               currentToolUse.inputJson += delta.partial_json ?? '';
@@ -340,7 +476,9 @@ export class AgentEngine {
             }
             const usage = (event as any).usage;
             if (usage) {
-              totalUsage.output_tokens += usage.output_tokens ?? 0;
+              const outTokens = usage.output_tokens ?? 0;
+              totalUsage.output_tokens += outTokens;
+              loopOutputTokens += outTokens;
             }
             break;
           }
@@ -348,7 +486,9 @@ export class AgentEngine {
           case 'message_start': {
             const msgUsage = (event as any).message?.usage;
             if (msgUsage) {
-              totalUsage.input_tokens += msgUsage.input_tokens ?? 0;
+              const inTokens = msgUsage.input_tokens ?? 0;
+              totalUsage.input_tokens += inTokens;
+              loopInputTokens += inTokens;
               totalUsage.cache_read_tokens =
                 (totalUsage.cache_read_tokens ?? 0) + (msgUsage.cache_read_input_tokens ?? 0);
               totalUsage.cache_creation_tokens =
@@ -359,6 +499,61 @@ export class AgentEngine {
           }
         }
       }
+
+      // Fallback for Anthropic-compatible providers that may emit incomplete deltas
+      // but still return full content in finalMessage().
+      if (assistantBlocks.length === 0 && !currentToolUse && !currentText) {
+        try {
+          const finalMessage = await (stream as any).finalMessage?.();
+          if (finalMessage?.stop_reason) {
+            stopReason = finalMessage.stop_reason;
+          }
+          const finalContent = Array.isArray(finalMessage?.content) ? finalMessage.content : [];
+          for (const block of finalContent) {
+            if (block?.type === 'text' && typeof block.text === 'string' && block.text !== '') {
+              assistantBlocks.push({ type: 'text', text: block.text });
+              onEvent({ type: 'text_delta', data: { text: block.text } });
+            } else if (
+              block?.type === 'tool_use' &&
+              typeof block.id === 'string' &&
+              typeof block.name === 'string'
+            ) {
+              const parsedInput =
+                block.input && typeof block.input === 'object'
+                  ? (block.input as Record<string, unknown>)
+                  : {};
+              assistantBlocks.push({
+                type: 'tool_use',
+                id: block.id,
+                name: block.name,
+                input: parsedInput,
+              });
+              toolUseBlocks.push({
+                id: block.id,
+                name: block.name,
+                input: parsedInput,
+              });
+              if (input.show_tool_use) {
+                onEvent({ type: 'tool_use', data: { tool: block.name, input: parsedInput } });
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn({ err }, 'Failed to recover response from finalMessage()');
+        }
+      }
+
+      this.emitTrace(input, 'model_call_end', {
+        loop: loopCount,
+        model,
+        latency_ms: Date.now() - loopStartMs,
+        stop_reason: stopReason,
+        input_tokens: loopInputTokens,
+        output_tokens: loopOutputTokens,
+        output_text_length: finalText.length,
+        tool_use_count: toolUseBlocks.length,
+        thinking: this.formatThinkingForTrace(thinkingText),
+      });
 
       // Flush trailing text
       if (currentText) {
@@ -389,6 +584,12 @@ export class AgentEngine {
         const toolResultBlocks: ToolResultContentBlock[] = [];
 
         for (const block of toolUseBlocks) {
+          this.emitTrace(input, 'tool_call_start', {
+            loop: loopCount,
+            tool_use_id: block.id,
+            tool_name: block.name,
+            input: block.input,
+          });
           if (block.name === 'AskUserQuestion') {
             const questions = normalizeQuestions(block.input.questions);
             onEvent({
@@ -408,6 +609,13 @@ export class AgentEngine {
             });
 
             if (input.pauseOnInput) {
+              this.emitTrace(input, 'tool_call_end', {
+                loop: loopCount,
+                tool_use_id: block.id,
+                tool_name: block.name,
+                status: 'awaiting_input',
+                question_count: questions.length,
+              });
               await this.mcpClientPool.cleanupTransient();
               return {
                 content: finalText,
@@ -426,6 +634,13 @@ export class AgentEngine {
 
             const userResponse = await waitForUserInput(block.id);
             toolResultBlocks.push(buildUserInputToolResult(userResponse));
+            this.emitTrace(input, 'tool_call_end', {
+              loop: loopCount,
+              tool_use_id: block.id,
+              tool_name: block.name,
+              status: 'ok',
+              resumed: true,
+            });
           } else {
             const result = await executeTool(block, toolContext, this.mcpClientPool);
             toolResultBlocks.push({
@@ -441,6 +656,14 @@ export class AgentEngine {
                 data: { tool: block.name, content: result.content },
               });
             }
+            this.emitTrace(input, 'tool_call_end', {
+              loop: loopCount,
+              tool_use_id: block.id,
+              tool_name: block.name,
+              status: result.is_error ? 'error' : 'ok',
+              is_error: result.is_error,
+              result_preview: String(result.content).slice(0, 1000),
+            });
           }
         }
 
@@ -473,6 +696,24 @@ export class AgentEngine {
             messages.push({ role: cm.role, content: [{ type: 'text', text: cm.content }] });
           }
         }
+        const compactedSanitizeResult = sanitizeToolLinkage(messages);
+        messages.length = 0;
+        messages.push(...compactedSanitizeResult.messages);
+        if (compactedSanitizeResult.orphanedToolResults > 0) {
+          logger.warn(
+            {
+              conversationId: input.conversationId,
+              loop: loopCount,
+              orphanedToolResults: compactedSanitizeResult.orphanedToolResults,
+            },
+            'Recovered orphan tool_result blocks after compaction',
+          );
+          this.emitTrace(input, 'tool_linkage_recovered', {
+            loop: loopCount,
+            orphaned_tool_results: compactedSanitizeResult.orphanedToolResults,
+            stage: 'post_compaction',
+          });
+        }
       }
     }
 
@@ -490,6 +731,42 @@ export class AgentEngine {
       model,
       newMessages,
     };
+  }
+
+  private emitTrace(
+    input: AgentRunInput,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): void {
+    if (!input.traceId) {
+      return;
+    }
+    this.traceSink.emit({
+      trace_id: input.traceId,
+      request_id: input.requestId,
+      conversation_id: input.conversationId,
+      user_id: input.userId,
+      message_id: input.messageId,
+      event_type: eventType,
+      payload,
+    });
+  }
+
+  private formatThinkingForTrace(thinkingText: string): string | undefined {
+    const normalized = thinkingText.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    if (config.TRACE_INCLUDE_THINKING === 'off') {
+      return undefined;
+    }
+    if (config.TRACE_INCLUDE_THINKING === 'full') {
+      return normalized.slice(0, config.TRACE_THINKING_MAX_CHARS);
+    }
+    if (normalized.length <= config.TRACE_THINKING_MAX_CHARS) {
+      return normalized;
+    }
+    return `${normalized.slice(0, config.TRACE_THINKING_MAX_CHARS)}...`;
   }
 
   private async buildToolList(

@@ -1,6 +1,11 @@
 import type { Conversation, ConversationMessage } from '../types.js';
 
 export interface ConversationStore {
+  openConversation?(
+    userId: string,
+    conversationId?: string,
+    idleTimeoutSeconds?: number,
+  ): Promise<Conversation>;
   createConversation(userId: string, conversationId?: string): Promise<Conversation>;
   getConversation(conversationId: string, userId: string): Promise<Conversation | null>;
   listConversations(

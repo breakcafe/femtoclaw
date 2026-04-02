@@ -10,6 +10,7 @@ import { McpClientPool } from './mcp/client-pool.js';
 import { unlinkSync, existsSync } from 'fs';
 import type express from 'express';
 import { AgentEngine } from './agent/engine.js';
+import { NoopTraceSink } from './trace/sink.js';
 
 const TEST_DB = '/tmp/femtoclaw-test-server.db';
 
@@ -32,6 +33,7 @@ describe('Server', () => {
       skillManager,
       memoryService: memService,
       mcpClientPool: mcpPool,
+      traceSink: new NoopTraceSink(),
     };
 
     app = createApp(deps);

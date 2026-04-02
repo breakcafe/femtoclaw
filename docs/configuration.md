@@ -6,9 +6,9 @@ This document lists every configuration surface used by the current `code/` impl
 
 ### Required
 
-| Variable            | Purpose                      |
-| ------------------- | ---------------------------- |
-| `ANTHROPIC_API_KEY` | Anthropic-compatible API key |
+| Variable                  | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY` | Anthropic-compatible API credential |
 
 ### Server
 
@@ -21,10 +21,12 @@ This document lists every configuration surface used by the current `code/` impl
 
 ### Anthropic Runtime
 
-| Variable             | Default                     | Purpose                                                           |
-| -------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | Anthropic-compatible API base URL                                 |
-| `DEFAULT_MODEL`      | `claude-sonnet-4-20250514`  | Default model for `/chat`                                         |
+| Variable             | Default                              | Purpose                                                           |
+| -------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `ANTHROPIC_BASE_URL` | `https://api.minimaxi.com/anthropic` | Anthropic-compatible API base URL                                 |
+| `ANTHROPIC_AUTH_TOKEN` | empty                              | Preferred auth token                                               |
+| `ANTHROPIC_API_KEY`  | empty                                | API key auth (fallback when auth token is empty)                  |
+| `DEFAULT_MODEL`      | `MiniMax-M2.7`                       | Default model for `/chat`                                         |
 | `FALLBACK_MODEL`     | empty                       | Reserved fallback model field; not actively used in the main loop |
 | `MAX_OUTPUT_TOKENS`  | `16384`                     | Max tokens for a single Anthropic response                        |
 | `MAX_EXECUTION_MS`   | `300000`                    | Request timeout ceiling                                           |
@@ -43,7 +45,9 @@ This document lists every configuration surface used by the current `code/` impl
 | `MEMORY_SERVICE_TYPE`         | `sqlite` | `sqlite`, `api`, or `mcp`                           |
 | `MEMORY_SERVICE_URL`          | empty    | Base URL for API memory backend                     |
 | `MEMORY_SERVICE_API_KEY`      | empty    | API token for API memory backend                    |
-| `MEMORY_MCP_SERVER`           | `memory` | MCP server name used when `MEMORY_SERVICE_TYPE=mcp` |
+| `MEMORY_SERVICE_AUTH_HEADER`  | `Authorization` | Auth header name for API memory backend     |
+| `MEMORY_SERVICE_AUTH_SCHEME`  | `Bearer` | Auth scheme prefix; empty means raw token value     |
+| `MEMORY_MCP_SERVER`           | `memory` | MCP server name used when `MEMORY_SERVICE_TYPE=mcp`; also used by API mode to read fallback URL/auth from managed MCP config |
 | `MAX_MEMORY_ENTRIES_PER_USER` | `200`    | SQLite memory entry cap per user                    |
 | `MAX_MEMORY_VALUE_LENGTH`     | `2000`   | Max stored memory value length                      |
 | `MAX_MEMORY_INDEX_IN_PROMPT`  | `50`     | Max memory summary entries injected into prompt     |
@@ -73,16 +77,30 @@ Notes:
 
 ### Org Prompt
 
-| Variable                | Default | Purpose                             |
-| ----------------------- | ------- | ----------------------------------- |
-| `ORG_INSTRUCTIONS_PATH` | empty   | Optional org instructions file path |
+| Variable                | Default             | Purpose                             |
+| ----------------------- | ------------------- | ----------------------------------- |
+| `ORG_INSTRUCTIONS_PATH` | `/app/org/claude.md` | Optional org instructions file path |
 
 ### MCP
 
 | Variable             | Default                     | Purpose                          |
 | -------------------- | --------------------------- | -------------------------------- |
-| `MANAGED_MCP_CONFIG` | `./config/managed-mcp.json` | Managed MCP config JSON file     |
+| `MANAGED_MCP_CONFIG` | `/app/org/managed-mcp.json` | Managed MCP config JSON file     |
 | `ENABLE_MCP`         | `true`                      | Global MCP enable/disable switch |
+
+### Trace
+
+| Variable                    | Default                               | Purpose                                           |
+| --------------------------- | ------------------------------------- | ------------------------------------------------- |
+| `TRACE_ENABLED`             | `true`                                | Enable async trace sink                           |
+| `TRACE_ENDPOINT`            | `http://kapivault:80/trace/events`    | Trace sink endpoint                               |
+| `TRACE_API_KEY`             | empty                                 | Optional bearer token for trace sink              |
+| `TRACE_BATCH_SIZE`          | `50`                                  | Max events per flush                              |
+| `TRACE_FLUSH_INTERVAL_MS`   | `500`                                 | Flush cadence                                     |
+| `TRACE_QUEUE_MAX`           | `5000`                                | In-memory trace queue capacity                    |
+| `TRACE_TIMEOUT_MS`          | `1500`                                | HTTP timeout for trace flush                      |
+| `TRACE_INCLUDE_THINKING`    | `summary`                             | `off`, `summary`, or `full`                       |
+| `TRACE_THINKING_MAX_CHARS`  | `2000`                                | Max persisted thinking chars when enabled         |
 
 ### Request Shaping
 
@@ -115,7 +133,7 @@ Notes:
 | Path                         | Purpose                               |
 | ---------------------------- | ------------------------------------- |
 | `config/managed-mcp.json`    | Managed MCP server definitions        |
-| `config/org-instructions.md` | Optional org prompt content           |
+| `org/claude.md`              | Optional org prompt content           |
 | `skills/builtin/`            | Built-in skills shipped with the repo |
 | `skills/user/`               | Optional local user skill directory   |
 
@@ -124,6 +142,7 @@ Notes:
 | Path                | Purpose                        |
 | ------------------- | ------------------------------ |
 | `data/femtoclaw.db` | Default SQLite database output |
+| `dev-data/assets/`  | Optional prepackaged local assets for Docker build (`org/`, `skills/`) |
 
 ## Managed MCP Config Format
 
@@ -134,7 +153,15 @@ Notes:
   "mcpServers": {
     "example-http": {
       "type": "http",
-      "url": "http://localhost:9100/mcp"
+      "url": "http://localhost:9100/mcp",
+      "headers": {
+        "X-MCP-Session-Id": "${user_id}"
+      },
+      "auth": {
+        "header": "Authorization",
+        "scheme": "Bearer",
+        "token": "your-token"
+      }
     },
     "example-stdio": {
       "type": "stdio",
@@ -150,6 +177,17 @@ Supported server types:
 - `http`
 - `sse`
 - `stdio`
+
+Optional auth object fields:
+
+- `auth.header`: auth header name, e.g. `Authorization`, `X-API-Key`
+- `auth.scheme`: auth scheme prefix; use empty string for raw token mode
+- `auth.token`: auth token value
+
+Memory API backend resolution order (`MEMORY_SERVICE_TYPE=api`):
+
+1. explicit env vars (`MEMORY_SERVICE_URL`, `MEMORY_SERVICE_API_KEY`, `MEMORY_SERVICE_AUTH_*`)
+2. fallback to managed MCP server named by `MEMORY_MCP_SERVER` for URL/auth
 
 ## Chat-Level Overrides
 
