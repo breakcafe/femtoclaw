@@ -135,8 +135,28 @@ function recoverOrphanToolResult(toolUseId: string, content: string): TextBlock 
   };
 }
 
+function shouldDropHistoricalText(text: string): boolean {
+  const normalized = text.trim();
+  if (normalized === '') {
+    return true;
+  }
+  if (normalized.startsWith('[Tool call]')) {
+    return true;
+  }
+  if (normalized.startsWith('[Tool result]')) {
+    return true;
+  }
+  if (normalized.startsWith('Recovered orphan tool_result')) {
+    return true;
+  }
+  return false;
+}
+
 function normalizeHistoricalBlock(block: ContentBlock): TextBlock | null {
   if (block.type === 'text') {
+    if (shouldDropHistoricalText(block.text)) {
+      return null;
+    }
     return block;
   }
   // Drop historical tool_use/tool_result blocks to avoid stale linkage errors
