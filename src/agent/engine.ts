@@ -128,6 +128,51 @@ function buildUserInputToolResult(response: InputResponse): ToolResultContentBlo
   };
 }
 
+function recoverOrphanToolResult(toolUseId: string, content: string): TextBlock {
+  return {
+    type: 'text',
+    text: `Recovered orphan tool_result (tool_use_id=${toolUseId}).\n${content}`,
+  };
+}
+
+function sanitizeToolLinkage(messages: ApiMessage[]): {
+  messages: ApiMessage[];
+  orphanedToolResults: number;
+} {
+  const seenToolUseIds = new Set<string>();
+  const sanitized: ApiMessage[] = [];
+  let orphanedToolResults = 0;
+
+  for (const message of messages) {
+    const nextBlocks: ContentBlock[] = [];
+    for (const block of message.content) {
+      if (block.type === 'tool_use' && message.role === 'assistant') {
+        seenToolUseIds.add(block.id);
+        nextBlocks.push(block);
+        continue;
+      }
+
+      if (block.type === 'tool_result' && message.role === 'user') {
+        if (seenToolUseIds.has(block.tool_use_id)) {
+          nextBlocks.push(block);
+        } else {
+          orphanedToolResults++;
+          nextBlocks.push(recoverOrphanToolResult(block.tool_use_id, block.content));
+        }
+        continue;
+      }
+
+      nextBlocks.push(block);
+    }
+
+    if (nextBlocks.length > 0) {
+      sanitized.push({ role: message.role, content: nextBlocks });
+    }
+  }
+
+  return { messages: sanitized, orphanedToolResults };
+}
+
 export class AgentEngine {
   private anthropic: Anthropic;
 
@@ -246,6 +291,24 @@ export class AgentEngine {
       }
 
       // Create API request
+      const sanitizeResult = sanitizeToolLinkage(messages);
+      messages.length = 0;
+      messages.push(...sanitizeResult.messages);
+      if (sanitizeResult.orphanedToolResults > 0) {
+        logger.warn(
+          {
+            conversationId: input.conversationId,
+            loop: loopCount,
+            orphanedToolResults: sanitizeResult.orphanedToolResults,
+          },
+          'Recovered orphan tool_result blocks before model call',
+        );
+        this.emitTrace(input, 'tool_linkage_recovered', {
+          loop: loopCount,
+          orphaned_tool_results: sanitizeResult.orphanedToolResults,
+        });
+      }
+
       const loopStartMs = Date.now();
       let loopInputTokens = 0;
       let loopOutputTokens = 0;
@@ -546,6 +609,24 @@ export class AgentEngine {
           } catch {
             messages.push({ role: cm.role, content: [{ type: 'text', text: cm.content }] });
           }
+        }
+        const compactedSanitizeResult = sanitizeToolLinkage(messages);
+        messages.length = 0;
+        messages.push(...compactedSanitizeResult.messages);
+        if (compactedSanitizeResult.orphanedToolResults > 0) {
+          logger.warn(
+            {
+              conversationId: input.conversationId,
+              loop: loopCount,
+              orphanedToolResults: compactedSanitizeResult.orphanedToolResults,
+            },
+            'Recovered orphan tool_result blocks after compaction',
+          );
+          this.emitTrace(input, 'tool_linkage_recovered', {
+            loop: loopCount,
+            orphaned_tool_results: compactedSanitizeResult.orphanedToolResults,
+            stage: 'post_compaction',
+          });
         }
       }
     }
