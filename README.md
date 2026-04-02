@@ -163,6 +163,8 @@ Important variables:
 | `SQLITE_DB_PATH`             | `./data/femtoclaw.db`            | Shared SQLite path for conversation + memory      |
 | `CONVERSATION_STORE_TYPE`    | `sqlite`                         | `sqlite` or `api`                                 |
 | `MEMORY_SERVICE_TYPE`        | `sqlite`                         | `sqlite`, `api`, or `mcp`                         |
+| `MEMORY_SERVICE_AUTH_HEADER` | `Authorization`                  | Auth header name for API memory backend           |
+| `MEMORY_SERVICE_AUTH_SCHEME` | `Bearer`                         | Auth scheme prefix; empty means raw token mode    |
 | `MEMORY_MCP_SERVER`          | `memory`                         | MCP server name used by `MEMORY_SERVICE_TYPE=mcp` |
 | `ORG_SKILLS_URL`             | empty                            | Local org skills directory                        |
 | `USER_SKILLS_DIR`            | `./skills/user`                  | Optional user skill directory                     |
@@ -174,6 +176,8 @@ Important variables:
 | `ALLOWED_TOOLS`              | `*`                              | Built-in tool allowlist                           |
 
 Full configuration reference: `docs/configuration.md`
+
+For `MEMORY_SERVICE_TYPE=api`, URL/auth can also fall back to the managed MCP server entry named by `MEMORY_MCP_SERVER` (including optional `auth` fields in `managed-mcp.json`), while explicit env vars remain highest priority.
 
 ## Makefile
 

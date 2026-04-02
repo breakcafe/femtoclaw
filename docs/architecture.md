@@ -544,6 +544,37 @@ Pending questions expire after `INPUT_TIMEOUT_MS` (default 5 minutes).
 
 ---
 
+## Trace Sink (`src/trace/`)
+
+Trace emission is asynchronous and non-blocking for the main request path.
+
+- `createTraceSink()` returns:
+  - `NoopTraceSink` when `TRACE_ENABLED=false` or `TRACE_ENDPOINT` is empty
+  - `AsyncHttpTraceSink` otherwise
+- `AsyncHttpTraceSink` buffers events in memory, flushes by `TRACE_BATCH_SIZE` or `TRACE_FLUSH_INTERVAL_MS`, and drops on overflow (`TRACE_QUEUE_MAX`) with warning logs.
+- Network send timeout is controlled by `TRACE_TIMEOUT_MS`.
+- Ingestion auth uses optional `TRACE_API_KEY` via `x-api-key` header.
+
+Event payload contract:
+
+```typescript
+interface TraceEvent {
+  trace_id: string;                // required
+  event_type: string;              // required
+  service?: string;                // default: "femtoclaw"
+  ts?: string;                     // default: ISO timestamp at emit-time
+  request_id?: string;
+  conversation_id?: string;
+  user_id?: string;
+  message_id?: string;
+  payload?: Record<string, unknown>;
+}
+```
+
+Thinking capture behavior is controlled by `TRACE_INCLUDE_THINKING` and `TRACE_THINKING_MAX_CHARS` in `AgentEngine`.
+
+---
+
 ## File Map
 
 ```
@@ -594,6 +625,9 @@ src/
     managed.ts              config/managed-mcp.json loader (94 lines)
     tool-mapper.ts          MCP <-> Anthropic tool mapping (44 lines)
     types.ts                MCP content types (40 lines)
+
+  trace/
+    sink.ts                 async HTTP trace sink + noop sink (157 lines)
 
   conversation/
     manager.ts              store + lock + input handling (196 lines)

@@ -47,7 +47,7 @@ This document lists every configuration surface used by the current `code/` impl
 | `MEMORY_SERVICE_API_KEY`      | empty    | API token for API memory backend                    |
 | `MEMORY_SERVICE_AUTH_HEADER`  | `Authorization` | Auth header name for API memory backend     |
 | `MEMORY_SERVICE_AUTH_SCHEME`  | `Bearer` | Auth scheme prefix; empty means raw token value     |
-| `MEMORY_MCP_SERVER`           | `memory` | MCP server name used when `MEMORY_SERVICE_TYPE=mcp` |
+| `MEMORY_MCP_SERVER`           | `memory` | MCP server name used when `MEMORY_SERVICE_TYPE=mcp`; also used by API mode to read fallback URL/auth from managed MCP config |
 | `MAX_MEMORY_ENTRIES_PER_USER` | `200`    | SQLite memory entry cap per user                    |
 | `MAX_MEMORY_VALUE_LENGTH`     | `2000`   | Max stored memory value length                      |
 | `MAX_MEMORY_INDEX_IN_PROMPT`  | `50`     | Max memory summary entries injected into prompt     |
@@ -153,7 +153,15 @@ Notes:
   "mcpServers": {
     "example-http": {
       "type": "http",
-      "url": "http://localhost:9100/mcp"
+      "url": "http://localhost:9100/mcp",
+      "headers": {
+        "X-MCP-Session-Id": "${user_id}"
+      },
+      "auth": {
+        "header": "Authorization",
+        "scheme": "Bearer",
+        "token": "your-token"
+      }
     },
     "example-stdio": {
       "type": "stdio",
@@ -169,6 +177,17 @@ Supported server types:
 - `http`
 - `sse`
 - `stdio`
+
+Optional auth object fields:
+
+- `auth.header`: auth header name, e.g. `Authorization`, `X-API-Key`
+- `auth.scheme`: auth scheme prefix; use empty string for raw token mode
+- `auth.token`: auth token value
+
+Memory API backend resolution order (`MEMORY_SERVICE_TYPE=api`):
+
+1. explicit env vars (`MEMORY_SERVICE_URL`, `MEMORY_SERVICE_API_KEY`, `MEMORY_SERVICE_AUTH_*`)
+2. fallback to managed MCP server named by `MEMORY_MCP_SERVER` for URL/auth
 
 ## Chat-Level Overrides
 

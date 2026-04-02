@@ -88,6 +88,11 @@ export interface McpServerConfig {
   type?: 'http' | 'sse' | 'stdio';
   url?: string;
   headers?: Record<string, string>;
+  auth?: {
+    header?: string;
+    scheme?: string;
+    token?: string;
+  };
   command?: string;
   args?: string[];
   env?: Record<string, string>;

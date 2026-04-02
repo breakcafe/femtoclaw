@@ -5,12 +5,17 @@ import type {
   MemoryType,
   WriteMemoryInput,
 } from '../types.js';
-import { config } from '../config.js';
+
+export interface ApiMemoryAuthOptions {
+  authHeader?: string;
+  authScheme?: string;
+}
 
 export class ApiMemoryService implements MemoryServiceInterface {
   constructor(
     private baseUrl: string,
     private apiKey: string,
+    private auth: ApiMemoryAuthOptions = {},
   ) {}
 
   private buildHeaders(extra?: RequestInit['headers']): Record<string, string> {
@@ -18,8 +23,8 @@ export class ApiMemoryService implements MemoryServiceInterface {
       'Content-Type': 'application/json',
     };
     if (this.apiKey?.trim()) {
-      const authHeader = config.MEMORY_SERVICE_AUTH_HEADER.trim() || 'Authorization';
-      const authScheme = config.MEMORY_SERVICE_AUTH_SCHEME.trim();
+      const authHeader = this.auth.authHeader?.trim() || 'Authorization';
+      const authScheme = this.auth.authScheme?.trim() ?? 'Bearer';
       headers[authHeader] = authScheme ? `${authScheme} ${this.apiKey}` : this.apiKey;
     }
     if (!extra) {
