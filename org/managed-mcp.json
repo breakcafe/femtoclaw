@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "kapi": {
-      "type": "http",
-      "url": "https://next-int.kapii.cn/kapii-mcp-server-go/kapii/mcp"
-    }
-  }
-}
