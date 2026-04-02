@@ -494,6 +494,49 @@ export class AgentEngine {
         }
       }
 
+      // Fallback for Anthropic-compatible providers that may emit incomplete deltas
+      // but still return full content in finalMessage().
+      if (assistantBlocks.length === 0 && !currentToolUse && !currentText) {
+        try {
+          const finalMessage = await (stream as any).finalMessage?.();
+          if (finalMessage?.stop_reason) {
+            stopReason = finalMessage.stop_reason;
+          }
+          const finalContent = Array.isArray(finalMessage?.content) ? finalMessage.content : [];
+          for (const block of finalContent) {
+            if (block?.type === 'text' && typeof block.text === 'string' && block.text !== '') {
+              assistantBlocks.push({ type: 'text', text: block.text });
+              onEvent({ type: 'text_delta', data: { text: block.text } });
+            } else if (
+              block?.type === 'tool_use' &&
+              typeof block.id === 'string' &&
+              typeof block.name === 'string'
+            ) {
+              const parsedInput =
+                block.input && typeof block.input === 'object'
+                  ? (block.input as Record<string, unknown>)
+                  : {};
+              assistantBlocks.push({
+                type: 'tool_use',
+                id: block.id,
+                name: block.name,
+                input: parsedInput,
+              });
+              toolUseBlocks.push({
+                id: block.id,
+                name: block.name,
+                input: parsedInput,
+              });
+              if (input.show_tool_use) {
+                onEvent({ type: 'tool_use', data: { tool: block.name, input: parsedInput } });
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn({ err }, 'Failed to recover response from finalMessage()');
+        }
+      }
+
       this.emitTrace(input, 'model_call_end', {
         loop: loopCount,
         model,
