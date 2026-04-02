@@ -562,7 +562,11 @@ export class AgentEngine {
     };
   }
 
-  private emitTrace(input: AgentRunInput, eventType: string, payload: Record<string, unknown>): void {
+  private emitTrace(
+    input: AgentRunInput,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): void {
     if (!input.traceId) {
       return;
     }

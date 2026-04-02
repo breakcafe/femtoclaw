@@ -142,8 +142,8 @@ export const config: Config = {
   INPUT_TIMEOUT_MS: envInt('INPUT_TIMEOUT_MS', 300000),
 
   ENABLE_MCP: env('ENABLE_MCP', 'true') === 'true',
-  TRACE_ENABLED: env('TRACE_ENABLED', 'false') === 'true',
-  TRACE_ENDPOINT: env('TRACE_ENDPOINT'),
+  TRACE_ENABLED: env('TRACE_ENABLED', 'true') === 'true',
+  TRACE_ENDPOINT: env('TRACE_ENDPOINT', 'http://kapivault:80/trace/events'),
   TRACE_API_KEY: env('TRACE_API_KEY'),
   TRACE_BATCH_SIZE: envInt('TRACE_BATCH_SIZE', 50),
   TRACE_FLUSH_INTERVAL_MS: envInt('TRACE_FLUSH_INTERVAL_MS', 500),
