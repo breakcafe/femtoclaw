@@ -135,28 +135,13 @@ function recoverOrphanToolResult(toolUseId: string, content: string): TextBlock 
   };
 }
 
-function stringifyToolInput(input: Record<string, unknown>): string {
-  try {
-    return JSON.stringify(input);
-  } catch {
-    return '[unserializable tool input]';
-  }
-}
-
-function normalizeHistoricalBlock(block: ContentBlock): TextBlock {
+function normalizeHistoricalBlock(block: ContentBlock): TextBlock | null {
   if (block.type === 'text') {
     return block;
   }
-  if (block.type === 'tool_use') {
-    return {
-      type: 'text',
-      text: `[Tool call] ${block.name}(${stringifyToolInput(block.input)})`,
-    };
-  }
-  return {
-    type: 'text',
-    text: `[Tool result] id=${block.tool_use_id}\n${block.content}`,
-  };
+  // Drop historical tool_use/tool_result blocks to avoid stale linkage errors
+  // and prevent models from imitating pseudo tool-call text.
+  return null;
 }
 
 function sanitizeToolLinkage(messages: ApiMessage[]): {
@@ -275,8 +260,12 @@ export class AgentEngine {
           const parsedBlocks = Array.isArray(parsed) ? (parsed as ContentBlock[]) : [];
           // Normalize historical tool blocks to text for strict Anthropic-compatible providers
           // (e.g. MiniMax) that may reject stale/non-adjacent tool linkage in prior turns.
-          const normalizedBlocks = parsedBlocks.map(normalizeHistoricalBlock);
-          messages.push({ role: msg.role, content: normalizedBlocks });
+          const normalizedBlocks = parsedBlocks
+            .map(normalizeHistoricalBlock)
+            .filter((b): b is TextBlock => b !== null);
+          if (normalizedBlocks.length > 0) {
+            messages.push({ role: msg.role, content: normalizedBlocks });
+          }
         } catch {
           // Legacy plain-text fallback
           messages.push({ role: msg.role, content: [{ type: 'text', text: msg.content }] });
