@@ -86,7 +86,13 @@ ENV NODE_ENV=production \
     BUILD_TIME=${BUILD_TIME} \
     PORT=9000 \
     MAX_EXECUTION_MS=300000 \
-    SQLITE_DB_PATH=/data/femtoclaw.db
+    SQLITE_DB_PATH=/data/femtoclaw.db \
+    CONVERSATION_STORE_TYPE=api \
+    CONVERSATION_STORE_URL=http://kapivault:80 \
+    CONVERSATION_STORE_API_KEY= \
+    ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic \
+    ANTHROPIC_AUTH_TOKEN=sk-api-He04G5AMzCKHid2Sdf7t2lED-070SO6laYMMtVjqU_QvD2zWmG-KtB5iOu7daGCS5y-HdkQ1xZYvaCm6fcROMNwKn9jNZ-Fasu_YFa4snrcZ6N7IP5X4zEE \
+    ANTHROPIC_API_KEY=
 
 WORKDIR /app
 
