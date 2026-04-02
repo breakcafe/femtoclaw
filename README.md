@@ -56,6 +56,13 @@ docker build --platform linux/amd64 --build-arg RUNTIME=bun -t femtoclaw:bun .
 docker run --rm -p 9000:9000 -e ANTHROPIC_API_KEY=sk-ant-xxx femtoclaw:latest
 ```
 
+Optional local prepackaged assets can be supplied from `dev-data/assets/` at build time:
+
+- `dev-data/assets/org/**` -> `/app/org/`
+- `dev-data/assets/skills/**` -> `/app/skills/`
+
+If the directory is absent, build continues normally.
+
 Pre-built images are available from GHCR:
 
 ```bash

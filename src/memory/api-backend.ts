@@ -5,6 +5,7 @@ import type {
   MemoryType,
   WriteMemoryInput,
 } from '../types.js';
+import { config } from '../config.js';
 
 export class ApiMemoryService implements MemoryServiceInterface {
   constructor(
@@ -17,7 +18,9 @@ export class ApiMemoryService implements MemoryServiceInterface {
       'Content-Type': 'application/json',
     };
     if (this.apiKey?.trim()) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
+      const authHeader = config.MEMORY_SERVICE_AUTH_HEADER.trim() || 'Authorization';
+      const authScheme = config.MEMORY_SERVICE_AUTH_SCHEME.trim();
+      headers[authHeader] = authScheme ? `${authScheme} ${this.apiKey}` : this.apiKey;
     }
     if (!extra) {
       return headers;

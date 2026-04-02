@@ -45,6 +45,8 @@ This document lists every configuration surface used by the current `code/` impl
 | `MEMORY_SERVICE_TYPE`         | `sqlite` | `sqlite`, `api`, or `mcp`                           |
 | `MEMORY_SERVICE_URL`          | empty    | Base URL for API memory backend                     |
 | `MEMORY_SERVICE_API_KEY`      | empty    | API token for API memory backend                    |
+| `MEMORY_SERVICE_AUTH_HEADER`  | `Authorization` | Auth header name for API memory backend     |
+| `MEMORY_SERVICE_AUTH_SCHEME`  | `Bearer` | Auth scheme prefix; empty means raw token value     |
 | `MEMORY_MCP_SERVER`           | `memory` | MCP server name used when `MEMORY_SERVICE_TYPE=mcp` |
 | `MAX_MEMORY_ENTRIES_PER_USER` | `200`    | SQLite memory entry cap per user                    |
 | `MAX_MEMORY_VALUE_LENGTH`     | `2000`   | Max stored memory value length                      |
@@ -140,6 +142,7 @@ Notes:
 | Path                | Purpose                        |
 | ------------------- | ------------------------------ |
 | `data/femtoclaw.db` | Default SQLite database output |
+| `dev-data/assets/`  | Optional prepackaged local assets for Docker build (`org/`, `skills/`) |
 
 ## Managed MCP Config Format
 

@@ -84,16 +84,6 @@ ENV NODE_ENV=production \
     APP_VERSION=${BUILD_VERSION} \
     BUILD_COMMIT=${BUILD_COMMIT} \
     BUILD_TIME=${BUILD_TIME} \
-    ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic \
-    ANTHROPIC_AUTH_TOKEN= \
-    ANTHROPIC_API_KEY= \
-    DEFAULT_MODEL=MiniMax-M2.7 \
-    CONVERSATION_STORE_TYPE=api \
-    CONVERSATION_STORE_URL=http://kapivault:80 \
-    CONVERSATION_STORE_API_KEY= \
-    MEMORY_SERVICE_TYPE=api \
-    MEMORY_SERVICE_URL=http://kapivault:80 \
-    MEMORY_SERVICE_API_KEY= \
     PORT=9000 \
     MAX_EXECUTION_MS=300000 \
     SQLITE_DB_PATH=/data/femtoclaw.db
@@ -105,6 +95,19 @@ COPY package.json ./
 COPY --from=builder /app/dist/        ./dist/
 COPY skills/ ./skills/
 COPY config/ ./config/
+
+# Optional local prepackaged assets (ignored in git):
+# - dev-data/assets/org/**      -> /app/org/
+# - dev-data/assets/skills/**   -> /app/skills/
+# Build should succeed when the folder is absent.
+RUN --mount=type=bind,source=.,target=/__ctx,readonly \
+    mkdir -p /app/org /app/skills && \
+    if [ -d /__ctx/dev-data/assets/org ]; then \
+      cp -R /__ctx/dev-data/assets/org/. /app/org/; \
+    fi && \
+    if [ -d /__ctx/dev-data/assets/skills ]; then \
+      cp -R /__ctx/dev-data/assets/skills/. /app/skills/; \
+    fi
 
 # Create data directory — use appropriate non-root user
 RUN mkdir -p /data && \
