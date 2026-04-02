@@ -73,6 +73,19 @@ export function chatRoutes(deps: ServerDeps): Router {
       ? conversationManager.getPausedInput(body.conversation_id)
       : null;
 
+    if (pausedInput && !body.input_response) {
+      res.status(409).json({
+        error: 'input_response required before sending a new message',
+        input_required: {
+          type: 'ask_user_question',
+          tool_use_id: pausedInput.toolUseId,
+          questions: pausedInput.questions,
+          timeout_ms: pausedInput.timeoutMs,
+        },
+      });
+      return;
+    }
+
     if (body.input_response) {
       if (!body.conversation_id) {
         res.status(400).json({ error: 'conversation_id required for input_response' });
@@ -147,7 +160,15 @@ export function chatRoutes(deps: ServerDeps): Router {
 
       // Load existing messages
       const existingMsgs = await conversationManager.getMessages(conversation.id);
-      const existingMessages = existingMsgs.map((m) => ({
+      const sortedExistingMsgs = [...existingMsgs].sort((a, b) => {
+        const ta = Date.parse(a.createdAt);
+        const tb = Date.parse(b.createdAt);
+        if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) {
+          return ta - tb;
+        }
+        return a.id.localeCompare(b.id);
+      });
+      const existingMessages = sortedExistingMsgs.map((m) => ({
         role: m.role,
         content: m.content,
       }));
